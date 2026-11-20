@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: CXS Portfolio
+  version: 1.0.0
+paths:
+  /api/search:
+    get:
+      operationId: searchPortfolio
+      summary: Search published portfolio content
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        "200":
+          description: Search results ordered by relevance
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    maxItems: 8
+                    items:
+                      $ref: "#/components/schemas/SearchResult"
+components:
+  schemas:
+    SearchResult:
+      type: object
+      required: [title, description, href, kind]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        href:
+          type: string
+        kind:
+          type: string
+          enum: [page, post, project]
