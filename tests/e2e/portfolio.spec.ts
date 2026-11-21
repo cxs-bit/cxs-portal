@@ -12,7 +12,7 @@ test("lights nearby buttons while preserving the native cursor", async ({ page }
   }
 
   const bounds = (await search.boundingBox())!;
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height + 125);
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y - 125);
   await expect(spotlight).toHaveJSProperty("hidden", false);
   await expect(search).toHaveCSS("background-image", /radial-gradient/);
   await page.mouse.move(8, (page.viewportSize()?.height ?? 400) / 2);
@@ -26,7 +26,7 @@ test("lights nearby buttons while preserving the native cursor", async ({ page }
 });
 
 test("supports keyboard navigation and search dismissal", async ({ page }) => {
-  await page.addInitScript(() => sessionStorage.setItem("cxs-crt-intro-seen", "1"));
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
@@ -39,55 +39,82 @@ test("supports keyboard navigation and search dismissal", async ({ page }) => {
   await expect(page.getByText("Quick links")).toBeVisible();
   await input.fill("nothingmatches");
   await expect(page.getByRole("status")).toHaveText("No results found.");
+  await expect(page.getByRole("menuitem", { name: "Projects" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(search).toBeFocused();
 
   await search.click();
+  let firstSearch = true;
+  await page.route("**/api/search?*", async (route) => {
+    if (!firstSearch) {
+      await route.continue();
+      return;
+    }
+    firstSearch = false;
+    await route.fulfill({ status: 503, body: "Unavailable" });
+  });
   await input.fill("starting point");
-  await expect(page.getByRole("menuitem", { name: "A starting point" })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Search is temporarily unavailable.");
+  await expect(page.getByRole("menuitem", { name: "Devlog" })).toBeVisible();
+  await page.getByRole("button", { name: "Retry search" }).click();
+  await expect(input).toHaveValue("starting point");
+  await expect(input).toBeFocused();
+  const result = page.getByRole("menuitem", { name: "A starting point" });
+  await expect(result).toBeVisible();
   await page.keyboard.press("ArrowDown");
+  await expect(result).toHaveAttribute("data-focused", "true");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/blog/starting-point");
   await expect(page.getByRole("heading", { name: "A starting point" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Devlog" }))
+    .toHaveAttribute("aria-current", "location");
 });
 
-test("persists themes and preserves readable reduced-motion layouts", async ({ page }) => {
-  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+test("keeps the dark palette and preserves readable reduced-motion layouts", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.addInitScript(() => localStorage.setItem("theme", "light"));
   await page.goto("/");
   const root = page.locator("html");
-  await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(root).toHaveClass(/\bdark\b/);
+  await expect(root).toHaveCSS("color-scheme", "dark");
   const background = page.locator(".site-crt");
   await expect(background).toHaveCSS("background-color", "rgb(9, 28, 27)");
   await expect(root).not.toHaveClass(/\blenis\b/);
-  await page.getByLabel("Color theme").selectOption("light");
-  await expect(root).toHaveAttribute("data-theme", "light");
-  await page.reload();
-  await expect(root).toHaveAttribute("data-theme", "light");
-  await expect(page.getByRole("heading", { name: "Building for the web." })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Color theme" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Building for the web. Showing the work." })).toBeVisible();
   await expect(background).toBeVisible();
   await expect(background).toHaveCSS("position", "fixed");
   await expect(background).toHaveCSS("pointer-events", "none");
-  await expect(background).toHaveCSS("background-image", /radial-gradient/);
-  await expect(background).not.toHaveCSS("background-image", /repeating-linear-gradient/);
+  await expect(background).toHaveCSS("background-image", "none");
   await expect(background.locator("canvas")).toHaveCount(0);
   await background.evaluate((element) => element.setAttribute("data-test-retained", "true"));
+  const dock = page.locator(".site-dock");
+  await expect(dock).toHaveCSS("position", "fixed");
 
   for (const width of [320, 640, 768, 1280]) {
     await page.setViewportSize({ width, height: 840 });
-    const fits = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
-    expect(fits, `Page overflows at ${width}px`).toBe(true);
+    await expect.poll(() => page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ), { message: `Page overflows at ${width}px` }).toBe(true);
+    await expect.poll(async () => {
+      const bounds = (await dock.boundingBox())!;
+      return Math.abs(bounds.x + bounds.width / 2 - width / 2) < 2 && bounds.y + bounds.height < 840;
+    }).toBe(true);
   }
 
   await page.setViewportSize({ width: 1280, height: 720 });
-  await expect(page.getByRole("heading", { name: "Latest writing" })).toBeInViewport();
+  await expect(page.getByRole("link", { name: "Explore the work" })).toBeInViewport();
 
-  await page.getByRole("link", { name: "Browse projects" }).click();
+  await dock.getByRole("link", { name: "Projects" }).click();
   await expect(page.getByRole("heading", { name: "No projects published yet" })).toBeVisible();
+  await expect(dock.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
   await expect(background).toBeVisible();
   await expect(background).toHaveAttribute("data-test-retained", "true");
   await expect(page.getByRole("link", { name: "Read the devlog" })).toBeVisible();
+  await page.getByRole("link", { name: "A starting point" }).click();
+  await expect(page.getByRole("heading", { name: "A starting point" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to the devlog" })).toBeVisible();
 });
 
 test("serves public metadata and keeps preview routes private in production", async ({ page, request }) => {

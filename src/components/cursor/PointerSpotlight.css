@@ -7,33 +7,31 @@
   pointer-events: none;
 }
 
-.pointer-spotlight::before {
+.pointer-spotlight::before,
+.pointer-spotlight::after {
   content: "";
   position: absolute;
   inset: -156.8px auto auto -156.8px;
   width: 313.6px;
   height: 313.6px;
-  background: radial-gradient(circle, rgb(85 149 181 / 7%), transparent 70%);
+  transform: translate3d(var(--light-x), var(--light-y), 0);
+  transition: transform 105ms cubic-bezier(.2, .7, .25, 1);
+  background: radial-gradient(circle, rgb(172 222 255 / 9%), transparent 66%);
 }
 
-.dark .pointer-spotlight::before,
-body:has(.crt-intro[aria-modal="true"]) .pointer-spotlight::before {
-  background: radial-gradient(circle, rgb(172 222 255 / 13%), transparent 70%);
+.pointer-spotlight::after {
+  transition-duration: 175ms;
+  background: radial-gradient(circle, rgb(172 222 255 / 4.5%), transparent 70%);
 }
 
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   :is(button, .spotlight-button)[data-spotlight] {
-    --spotlight-tint: rgb(93 165 205 / 21%);
+    --spotlight-tint: rgb(162 220 255 / 21%);
     background-image: radial-gradient(
       circle 145.6px at var(--spotlight-x) var(--spotlight-y),
       var(--spotlight-tint),
       transparent
     );
-  }
-
-  .dark :is(button, .spotlight-button)[data-spotlight],
-  .crt-intro-controls button[data-spotlight] {
-    --spotlight-tint: rgb(162 220 255 / 21%);
   }
 
   .spotlight-button.bg-primary[data-spotlight] {

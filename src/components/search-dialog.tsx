@@ -3,7 +3,7 @@
 import { BookOpen01Icon, Cancel01Icon, Folder01Icon, Home01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Autocomplete, Dialog, Heading, Input, Menu, MenuItem, Modal, ModalOverlay, Text, TextField } from "react-aria-components";
 import { searchPortfolio, type SearchResult } from "@/generated/portfolio";
 import { Button } from "./ui/button";
@@ -22,6 +22,8 @@ export default function SearchDialog({ onClose }: { onClose: (restoreFocus: bool
   const router = useRouter();
   const [input, setInput] = useState("");
   const [state, setState] = useState<SearchState>();
+  const [attempt, setAttempt] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
   const query = input.trim();
 
   useEffect(() => {
@@ -40,12 +42,21 @@ export default function SearchDialog({ onClose }: { onClose: (restoreFocus: bool
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, attempt]);
 
   const pending = Boolean(query && state?.query !== query);
-  const results = query ? pending ? [] : state?.results ?? [] : quickLinks;
-  const message = pending ? "Searching…" : state?.failed && query ? "Search is temporarily unavailable. Try another query." :
-    query && results.length === 0 ? "No results found." : "";
+  const failed = Boolean(query && !pending && state?.failed);
+  const matches = query && !pending ? (state?.results ?? []) : [];
+  const showQuickLinks = !query || (!pending && matches.length === 0);
+  const results = showQuickLinks ? quickLinks : matches;
+  const message = pending ? "Searching…" : failed ? "Search is temporarily unavailable." :
+    query && matches.length === 0 ? "No results found." : "";
+
+  function retrySearch() {
+    setState(undefined);
+    setAttempt((previous) => previous + 1);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
 
   return (
     <ModalOverlay isOpen isDismissable onOpenChange={(open) => !open && onClose(true)} className="search-overlay">
@@ -56,17 +67,18 @@ export default function SearchDialog({ onClose }: { onClose: (restoreFocus: bool
             <div className="search-input-row">
               <HugeiconsIcon icon={Search01Icon} size={20} aria-hidden="true" />
               <TextField aria-label="Search portfolio" className="search-field">
-                <Input autoFocus autoComplete="off" maxLength={100} placeholder="Search projects, posts, and pages…" />
+                <Input ref={inputRef} autoFocus autoComplete="off" maxLength={100} placeholder="Search projects, posts, and pages…" />
               </TextField>
               <Button variant="ghost" size="icon" onClick={() => onClose(true)} aria-label="Close search">
                 <HugeiconsIcon icon={Cancel01Icon} aria-hidden="true" />
               </Button>
             </div>
             <div className="search-results">
-              {!query && <p className="eyebrow">Quick links</p>}
               <p role="status" className={message ? "search-status" : "sr-only"}>
-                {message || (query ? `${results.length} results` : "")}
+                {message || (query ? `${matches.length} results` : "")}
               </p>
+              {failed && <Button variant="outline" size="sm" className="search-retry" onClick={retrySearch}>Retry search</Button>}
+              {showQuickLinks && <p className="eyebrow">Quick links</p>}
               <Menu
                 aria-label="Search results"
                 items={results}

@@ -52,6 +52,11 @@ export function Article({ post, preview = false }: {
           options={{ mdxOptions: { remarkPlugins: [remarkGfm] } }}
         />
       </div>
+      <footer className="article-return">
+        <Link href={preview ? "/preview" : "/blog"} className="text-link" prefetch={preview ? false : undefined}>
+          {preview ? "Back to drafts" : "Back to the devlog"}
+        </Link>
+      </footer>
     </article>
   );
 }

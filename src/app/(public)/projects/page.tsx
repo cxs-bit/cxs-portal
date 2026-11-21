@@ -3,9 +3,10 @@ import Link from "next/link";
 import { Folder01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { buttonVariants } from "@/components/ui/button";
+import { listPublishedPosts } from "@/lib/posts";
 import { projects } from "@/lib/site";
 
-const description = "A home for finished work and a place to follow projects as they take shape.";
+const description = "Software projects and notes on how they’re built.";
 
 export const metadata: Metadata = {
   title: "Projects",
@@ -14,7 +15,9 @@ export const metadata: Metadata = {
   openGraph: { title: "Projects", description, url: "/projects" },
 };
 
-export default function ProjectsPage() {
+export default async function ProjectsPage() {
+  const [latestNote] = projects.length ? [] : await listPublishedPosts();
+
   return (
     <div className="site-wrap content-page">
       <header className="page-heading">
@@ -34,8 +37,20 @@ export default function ProjectsPage() {
           <HugeiconsIcon icon={Folder01Icon} size={24} aria-hidden="true" />
           <div>
             <h2>No projects published yet</h2>
-            <p>The devlog is where I’ll share updates as work takes shape.</p>
-            <Link href="/blog" className={buttonVariants({ variant: "outline" })}>Read the devlog</Link>
+            {latestNote ? (
+              <>
+                <p>Follow the work in the latest published build note.</p>
+                <div className="project-discovery-links">
+                  <Link href={`/blog/${latestNote.slug}`} className={buttonVariants()}>{latestNote.title}</Link>
+                  <Link href="/blog" className="text-link">Read the devlog</Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>The devlog is where I’ll share updates as work takes shape.</p>
+                <Link href="/blog" className={buttonVariants({ variant: "outline" })}>Read the devlog</Link>
+              </>
+            )}
           </div>
         </section>
       )}

@@ -6,9 +6,13 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   const enter = page.getByRole("button", { name: "Enter portfolio" });
   await expect(enter).toBeVisible({ timeout: 20000 });
   await expect(enter).toBeFocused();
-  const power = page.getByRole("button", { name: "Click to turn ON/OFF" });
+  await expect(page.locator(".site-dock")).toBeHidden();
+  await page.keyboard.press("Control+k");
+  await expect(page.locator(".dock-search")).toHaveAttribute("aria-expanded", "false");
+  await expect(enter).toBeFocused();
+  const power = page.getByRole("button", { name: /(?:Click|Tap) to turn ON\/OFF/ });
   await expect(power).toHaveAttribute("aria-pressed", "true");
-  const label = power.getByText("Click to turn ON/OFF");
+  const label = power.locator(".crt-power-label");
   const labelBounds = (await label.boundingBox())!;
   const tvBounds = (await power.boundingBox())!;
   expect(labelBounds.y + labelBounds.height).toBeLessThan(tvBounds.y);
@@ -21,13 +25,15 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   await page.keyboard.press("Tab");
   await expect(enter).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Building for the web." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Building for the web. Showing the work." })).toBeVisible();
   await expect(enter).toHaveCount(0);
+  await expect(page.locator("#main")).toBeFocused();
+  await expect(page.locator(".site-dock")).toBeVisible();
   await page.reload();
   await expect(enter).toHaveCount(0);
 });
 
-test("scrolls into the page, back into the TV, and into the page again", async ({ page, browserName }) => {
+test("scrolls into the page, back into the TV, and into the page again", async ({ page, browserName, isMobile }) => {
   test.skip(browserName !== "chromium", "This test uses Chromium's software WebGL renderer.");
   await page.goto("/");
   const intro = page.getByRole("dialog", { name: "Enter the portfolio" });
@@ -54,20 +60,29 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   await expect.poll(() => portfolio.evaluate(node => Number(getComputedStyle(node).opacity))).toBeCloseTo(narrow ? 0.2 : 0.5, 1);
   await expect.poll(() => logo.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(0.1);
   await expect.poll(async () => (await background.boundingBox())?.width).toBeGreaterThan(initialWidth);
-  await page.mouse.wheel(0, 2000);
+  await page.mouse.wheel(0, 4000);
   await expect(intro).toHaveCount(0);
   await expect(noise).toHaveCount(0);
   await expect(portfolio).toHaveCSS("opacity", "1");
   await expect.poll(() => background.boundingBox()).toEqual(frame);
   expect(await heading?.evaluate(node => node === document.querySelector("#hero-title"))).toBe(true);
-  await page.mouse.wheel(0, -3000);
-  await expect(intro).toBeVisible();
-  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect.poll(() => page.evaluate(() =>
+    document.documentElement.scrollHeight - window.innerHeight - window.scrollY,
+  )).toBeLessThanOrEqual(2);
+  await expect(page.locator("html")).not.toHaveClass(/\blenis-scrolling\b/);
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    window.addEventListener("scroll", () => resolve(), { once: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }));
+  await expect(intro).toBeVisible({ timeout: 15000 });
   await expect(portfolio).toHaveCSS("opacity", "0");
   await expect(logo).toHaveCSS("opacity", "1");
-  await page.mouse.wheel(0, 2000);
+  await expect(intro.getByRole("button", { name: "Skip intro" })).toHaveCount(0);
+  if (isMobile) await intro.getByRole("button", { name: "Enter portfolio" }).tap();
+  else await page.keyboard.press("Escape");
   await expect(intro).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Browse projects" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Explore the work" })).toBeVisible();
+  await expect(page.locator("#main")).toBeFocused();
 });
 
 test("keeps a slow-loading model above the page the visitor is reading", async ({ page, browserName }) => {
@@ -79,9 +94,8 @@ test("keeps a slow-loading model above the page the visitor is reading", async (
   await page.goto("/");
   const portfolio = page.locator("#portfolio-page");
   await expect.poll(() => portfolio.evaluate(element => parseFloat(element.style.marginTop)), { timeout: 20000 }).toBeGreaterThan(0);
-  await expect(page.getByRole("heading", { name: "Building for the web." })).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Building for the web. Showing the work." })).toBeInViewport();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.mouse.move(170, 260);
-  await page.mouse.wheel(0, -2000);
-  await expect(page.getByRole("dialog", { name: "Enter the portfolio" })).toBeVisible();
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+  await expect(page.getByRole("dialog", { name: "Enter the portfolio" })).toBeVisible({ timeout: 15000 });
 });

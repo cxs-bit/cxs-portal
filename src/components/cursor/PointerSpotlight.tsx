@@ -50,7 +50,8 @@ export function PointerSpotlight() {
         if (Math.hypot(dx, dy) < radius) nearby.push({ button, bounds });
       }
 
-      halo.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      halo.style.setProperty("--light-x", `${x}px`);
+      halo.style.setProperty("--light-y", `${y}px`);
       halo.hidden = false;
       const next = new Set<HTMLElement>();
       for (const { button, bounds } of nearby) {

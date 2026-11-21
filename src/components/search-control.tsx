@@ -15,6 +15,7 @@ export function SearchControl() {
   const [shortcut, setShortcut] = useState("Ctrl K");
 
   function openSearch() {
+    if (trigger.current?.closest("[inert]")) return;
     previous.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setOpen(true);
   }
@@ -50,10 +51,10 @@ export function SearchControl() {
 
   return (
     <>
-      <Button ref={trigger} variant="outline" className="header-search" onClick={openSearch}
+      <Button ref={trigger} variant="ghost" className="dock-search" onClick={openSearch}
         aria-label="Search" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" aria-expanded={open}>
         <HugeiconsIcon icon={Search01Icon} aria-hidden="true" />
-        <span className="header-search-label">Search</span>
+        <span className="dock-search-label">Search</span>
         <kbd aria-hidden="true">{shortcut}</kbd>
       </Button>
       {open && <SearchDialog onClose={closeSearch} />}

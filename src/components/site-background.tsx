@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 
 const CRTWarp = dynamic(() => import("./backgrounds/CRTWarp"), { ssr: false });
@@ -13,6 +14,8 @@ function subscribe(onChange: () => void) {
 }
 
 export function SiteBackground() {
+  const pathname = usePathname();
+  const reading = pathname === "/blog" || pathname.startsWith("/blog/");
   const motionAllowed = useSyncExternalStore(
     subscribe,
     () => window.matchMedia(motionQuery).matches,
@@ -21,7 +24,7 @@ export function SiteBackground() {
 
   return (
     <div className="site-crt" aria-hidden="true">
-      {motionAllowed && (
+      {motionAllowed && !reading && (
         <CRTWarp
           color="#3dff7a"
           backgroundColor="#091c1b"

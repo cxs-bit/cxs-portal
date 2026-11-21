@@ -13,13 +13,13 @@ export const metadata: Metadata = {
 
 export default async function BlogPage() {
   return (
-    <div className="site-wrap content-page">
+    <div className="site-wrap content-page archive-page">
       <header className="page-heading">
         <h1>Devlog<span>.</span></h1>
         <p>{description}</p>
       </header>
       <section className="archive" aria-labelledby="archive-heading">
-        <h2 id="archive-heading" className="eyebrow section-kicker">All entries</h2>
+        <h2 id="archive-heading" className="sr-only">All entries</h2>
         <PostList posts={await listPublishedPosts()} />
       </section>
     </div>

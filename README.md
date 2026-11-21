@@ -13,9 +13,16 @@ pnpm dev
 
 Open http://localhost:3000. Copy `.env.example` to `.env.local` to add profile
 details or opt into local draft preview. The portfolio runs without secrets.
-`PORTFOLIO_SKILLS` accepts comma-separated skills. Set `SITE_URL` to the public
-HTTPS origin in Vercel Production so canonicals, social metadata, and the
-sitemap use the production address.
+Set `PORTFOLIO_NAME` and a short first-person `PORTFOLIO_BIO` for the homepage.
+The first sentence of the bio appears in the hero. `PORTFOLIO_SKILLS` accepts
+comma-separated technology names. The loop includes React, Next.js,
+TypeScript, and Tailwind CSS, plus the configured technologies. Names
+recognized by Simple Icons include their brand mark. Set `PORTFOLIO_EMAIL`
+to a public email address and use
+`PORTFOLIO_LINKEDIN_URL`, `PORTFOLIO_INSTAGRAM_URL`, and `PORTFOLIO_GITHUB_URL`
+for public profiles. `PORTFOLIO_CONTACT_URL` also supports an existing contact
+page. Set `SITE_URL` to the public HTTPS origin in Vercel Production so
+canonicals, social metadata, and the sitemap use the production address.
 
 The shadcn Maia preset (`b6Z8EJSgS`) uses Figtree for body and display text
 pending verification of Thunder’s license.
@@ -51,7 +58,9 @@ The dimensions reserve the exact aspect ratio. Use PNG, JPEG, WebP, or AVIF.
   change its status to `published`, and merge the post through Git. Public
   articles, search, the sitemap, and social cards use the published catalog.
 - Add real project entries to `src/lib/site.ts` when there is work to link to.
-  The project index has an empty state by default.
+  Use a unique `href` for each project. To include a homepage screenshot, add
+  `screenshot: { src: "/images/projects/project-name.webp", alt: "Description of the screenshot" }`
+  and put the public image in `public/images/projects/`.
 
 ## Configure draft preview
 
@@ -100,9 +109,12 @@ deployment if a release check fails.
 
 The homepage intro uses [CRT-TV by SketchyBot](https://sketchfab.com/3d-models/crt-tv-5f827ab96d184431a0179ceb7c463157), distributed under the [Sketchfab Standard license](https://sketchfab.com/licenses). The model is stored at `public/models/crt-tv.glb`.
 
-The shared layout uses a fixed React Bits CRTWarp background. A static
-gradient covers the viewport when reduced motion is enabled or
-WebGL2 is unavailable.
+`public/images/starting-point-crt.webp` is a screenshot of the portfolio’s CRT
+intro and accompanies the featured build note.
+
+The shared layout uses a fixed React Bits CRTWarp background. The dark
+background stays visible when reduced motion is enabled or WebGL2 is
+unavailable.
 
 `public/images/hero-sculpture.webp` was generated with the built-in image
 generator from this prompt.

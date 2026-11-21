@@ -9,12 +9,12 @@ export function PostList({ posts, preview = false }: { posts: PostSummary[]; pre
       {posts.map((post) => (
         <li key={post.slug}>
           <Link className="post-row" href={`${preview ? "/preview" : ""}/blog/${post.slug}`} prefetch={preview ? false : undefined}>
-            <time dateTime={post.date}>{formatPostDate(post.date)}</time>
-            <div>
-              <h3>{post.title}</h3>
-              <p>{post.description}</p>
+            <h3>{post.title}</h3>
+            <p>{post.description}</p>
+            <div className="post-meta">
+              <time dateTime={post.date}>{formatPostDate(post.date)}</time>
+              {post.tags[0] && <span className="post-tag">{post.tags[0]}</span>}
             </div>
-            {post.tags[0] && <span className="post-tag">{post.tags[0]}</span>}
           </Link>
         </li>
       ))}

@@ -25,7 +25,20 @@ export function CrtIntro() {
   const powerRef = useRef<HTMLButtonElement>(null);
   const distanceRef = useRef(0);
   const lenisRef = useRef<Lenis | null>(null);
-  const syncIntroRef = useRef<(() => void) | null>(null);
+  const syncIntroRef = useRef<((force?: boolean) => void) | null>(null);
+
+  function skipIntro() {
+    const top = distanceRef.current;
+    lenisRef.current?.scrollTo(top, { immediate: true, force: true });
+    if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top, behavior: "instant" });
+    syncIntroRef.current?.(true);
+  }
+
+  function enterPortfolio() {
+    const lenis = lenisRef.current;
+    if (lenis) lenis.scrollTo(distanceRef.current, { duration: 0.95, onComplete: skipIntro });
+    else skipIntro();
+  }
 
   useEffect(() => {
     if (!enabled) return;
@@ -140,6 +153,10 @@ export function CrtIntro() {
             tint: { value: new THREE.Color(0x272825) },
             wallTint: { value: new THREE.Color(0x171d20) },
             signalTint: { value: new THREE.Color(0x263438) },
+            leftLight: { value: new THREE.Color(0x6b94a9) },
+            rightLight: { value: new THREE.Color(0x738b82) },
+            lightTime: { value: 0 },
+            lightLevel: { value: 1 },
             powered: { value: 1 },
           },
           vertexShader: `
@@ -153,6 +170,10 @@ export function CrtIntro() {
             uniform vec3 tint;
             uniform vec3 wallTint;
             uniform vec3 signalTint;
+            uniform vec3 leftLight;
+            uniform vec3 rightLight;
+            uniform float lightTime;
+            uniform float lightLevel;
             uniform float powered;
             varying vec2 vUv;
             void main() {
@@ -163,12 +184,23 @@ export function CrtIntro() {
               float lampGlow = haze * vUv.y * vUv.y * 0.42;
               vec2 wall = (vUv - vec2(0.53, 0.34)) * vec2(3.8, 3.5);
               vec2 edges = min(vUv, 1.0 - vUv);
-              float wallGlow = exp(-dot(wall, wall))
-                * smoothstep(0.0, 0.24, min(edges.x, edges.y));
+              float wallEdge = smoothstep(0.0, 0.20, min(edges.x, edges.y));
+              float wallGlow = exp(-dot(wall, wall)) * wallEdge;
               vec3 wallColor = mix(wallTint, signalTint, powered);
               float wallAlpha = wallGlow * mix(0.22, 0.44, powered);
               float alpha = lampGlow + wallAlpha * (1.0 - lampGlow);
-              vec3 color = mix(wallColor, tint, lampGlow / max(alpha, 0.001));
+              vec3 color = wallColor * wallAlpha * (1.0 - lampGlow) + tint * lampGlow;
+
+              vec2 left = (vUv - vec2(0.24 + 0.065 * sin(lightTime * 0.43),
+                0.61 + 0.12 * cos(lightTime * 0.36))) * vec2(6.5, 4.2);
+              vec2 right = (vUv - vec2(0.76 + 0.06 * sin(lightTime * 0.34 + 2.1),
+                0.47 + 0.10 * cos(lightTime * 0.41 + 2.1))) * vec2(6.0, 4.6);
+              float leftGlow = 0.24 * wallEdge * lightLevel * exp(-dot(left, left));
+              float rightGlow = 0.20 * wallEdge * lightLevel * exp(-dot(right, right));
+              color = color * (1.0 - leftGlow) + leftLight * leftGlow;
+              color = color * (1.0 - rightGlow) + rightLight * rightGlow;
+              alpha = 1.0 - (1.0 - alpha) * (1.0 - leftGlow) * (1.0 - rightGlow);
+              color /= max(alpha, 0.001);
               gl_FragColor = vec4(color, alpha);
               #include <colorspace_fragment>
             }
@@ -304,13 +336,34 @@ export function CrtIntro() {
         const signal = powered ? 1 - THREE.MathUtils.smoothstep(progress, 0.03, 0.47) : 0;
         reflection.material.uniforms.strength.value = signal;
         shaft.material.uniforms.powered.value = signal;
+        shaft.material.uniforms.lightLevel.value = 1 - THREE.MathUtils.smoothstep(progress, 0.08, 0.35);
         renderer.render(scene, camera);
       };
+      let wallLightsTimer: number | undefined;
+      function stopWallLights() {
+        window.clearInterval(wallLightsTimer);
+        wallLightsTimer = undefined;
+      }
+      function syncWallLights() {
+        if (document.hidden || window.scrollY > 1) {
+          stopWallLights();
+        } else if (wallLightsTimer === undefined) {
+          // Drift slowly at rest and let scroll-driven frames take over during entry.
+          wallLightsTimer = window.setInterval(() => {
+            shaft.material.uniforms.lightTime.value += 0.1;
+            renderer.render(scene, camera);
+          }, 100);
+        }
+      }
       let showing: boolean | undefined;
-      const scroll = () => {
+      let lastScrollY = -1;
+      const scroll = (force = false) => {
         const scrollY = window.scrollY;
+        if (!force && scrollY === lastScrollY) return;
+        lastScrollY = scrollY;
         const progress = THREE.MathUtils.clamp(scrollY / distanceRef.current, 0, 1);
-        const active = progress < 1;
+        // Touch viewports can settle just below the requested CSS pixel.
+        const active = scrollY < distanceRef.current - 1;
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
@@ -329,10 +382,9 @@ export function CrtIntro() {
           }
         }
         if (active) render(scrollY, progress);
+        syncWallLights();
       };
-      const onNativeScroll = () => {
-        if (!lenisRef.current) scroll();
-      };
+      const onNativeScroll = () => scroll();
       const resize = () => {
         width = stage.clientWidth;
         height = stage.clientHeight;
@@ -354,7 +406,10 @@ export function CrtIntro() {
       // Keep that page in place and let them scroll up to see the television.
       const download = performance.getEntriesByName(modelUrl.href, "resource").at(-1);
       const lateModel = (download?.duration ?? 0) > 1800;
-      let startOnPage = lateModel || Boolean(window.scrollY || window.location.hash || page.contains(document.activeElement));
+      let startOnPage = lateModel || Boolean(
+        window.scrollY || window.location.hash || page.contains(document.activeElement) ||
+          page.querySelector('.dock-search[aria-expanded="true"]'),
+      );
       try { startOnPage ||= Boolean(sessionStorage.getItem(sessionKey)); } catch { /* Storage is optional. */ }
       const initialScroll = window.scrollY;
       resize();
@@ -365,15 +420,18 @@ export function CrtIntro() {
       const onResize = () => {
         const offset = window.scrollY - distanceRef.current;
         resize();
-        if (offset >= 0) window.scrollTo({ top: distanceRef.current + offset, behavior: "instant" });
-        if (lenisRef.current) lenisRef.current.resize();
-        else scroll();
+        if (offset >= -1) window.scrollTo({ top: distanceRef.current + Math.max(0, offset), behavior: "instant" });
+        lenisRef.current?.resize();
+        scroll(true);
       };
       window.addEventListener("resize", onResize);
       window.addEventListener("scroll", onNativeScroll, { passive: true });
+      document.addEventListener("visibilitychange", syncWallLights);
       dispose = () => {
         window.removeEventListener("resize", onResize);
         window.removeEventListener("scroll", onNativeScroll);
+        document.removeEventListener("visibilitychange", syncWallLights);
+        stopWallLights();
         syncIntroRef.current = null;
         page.style.removeProperty("margin-top");
         page.inert = false;
@@ -410,7 +468,7 @@ export function CrtIntro() {
   }, [enabled, inIntro]);
 
   useEffect(() => {
-    syncIntroRef.current?.();
+    syncIntroRef.current?.(true);
   }, [poweredOn]);
 
   if (!enabled) return null;
@@ -423,12 +481,17 @@ export function CrtIntro() {
       aria-hidden={!inIntro}
       style={{ visibility: inIntro ? "visible" : "hidden" }}
       onKeyDown={(event) => {
-        if (event.key === "Tab") {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          skipIntro();
+        } else if (event.key === "Tab") {
           event.preventDefault();
           event.currentTarget.dataset.keyboardCue = "";
-          const power = powerRef.current;
-          const next = power && !power.disabled && document.activeElement !== power ? power : enterRef.current;
-          next?.focus({ preventScroll: true });
+          const controls = [powerRef.current, enterRef.current]
+            .filter((control): control is HTMLButtonElement => Boolean(control && !control.disabled));
+          const current = controls.findIndex((control) => control === document.activeElement);
+          const offset = event.shiftKey ? -1 : 1;
+          controls[(current + offset + controls.length) % controls.length]?.focus({ preventScroll: true });
         }
       }}
       onWheel={(event) => { delete event.currentTarget.dataset.keyboardCue; }}
@@ -444,7 +507,7 @@ export function CrtIntro() {
             <Noise
               opacity={0.5}
               size={1}
-              fps={24}
+              fps={30}
               blendMode="overlay"
               contrast={1}
               colored={false}
@@ -462,17 +525,14 @@ export function CrtIntro() {
               aria-pressed={poweredOn}
               onClick={() => setPoweredOn((previous) => !previous)}
             >
-              <span className="crt-power-label">Click to turn ON/OFF</span>
+              <span className="crt-power-label">
+                <span className="crt-power-click">Click</span><span className="crt-power-tap">Tap</span> to turn <strong>ON/OFF</strong>
+              </span>
             </button>
           </div>
           <div className="crt-intro-controls">
             <p>Scroll to enter</p>
-            <button ref={enterRef} type="button" onClick={() => {
-              const top = distanceRef.current;
-              const lenis = lenisRef.current;
-              if (lenis) lenis.scrollTo(top, { duration: 0.95 });
-              else window.scrollTo({ top, behavior: "smooth" });
-            }}>Enter portfolio</button>
+            <button ref={enterRef} type="button" onClick={enterPortfolio}>Enter portfolio</button>
           </div>
         </div>
     </div>, document.body,
