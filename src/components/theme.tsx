@@ -8,13 +8,13 @@ import { ThemeProvider, useTheme } from "next-themes";
 const subscribe = () => () => {};
 
 export function Theme({ children }: { children: ReactNode }) {
-  return <ThemeProvider attribute={["data-theme", "class"]} defaultTheme="system" enableSystem disableTransitionOnChange>{children}</ThemeProvider>;
+  return <ThemeProvider attribute={["data-theme", "class"]} defaultTheme="dark" enableSystem disableTransitionOnChange>{children}</ThemeProvider>;
 }
 
 export function ThemeControl() {
   const mounted = useSyncExternalStore(subscribe, () => true, () => false);
   const { theme, setTheme } = useTheme();
-  const current = mounted ? theme ?? "system" : "system";
+  const current = mounted ? theme ?? "dark" : "dark";
   const icon = current === "light" ? Sun03Icon : current === "dark" ? Moon02Icon : ComputerIcon;
 
   return (

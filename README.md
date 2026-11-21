@@ -98,6 +98,8 @@ deployment if a release check fails.
 
 ## Background and artwork
 
+The homepage intro uses [CRT-TV by SketchyBot](https://sketchfab.com/3d-models/crt-tv-5f827ab96d184431a0179ceb7c463157), distributed under the [Sketchfab Standard license](https://sketchfab.com/licenses). The model is stored at `public/models/crt-tv.glb`.
+
 The shared layout uses a fixed React Bits CRTWarp background. A static
 gradient covers the viewport when reduced motion is enabled or
 WebGL2 is unavailable.

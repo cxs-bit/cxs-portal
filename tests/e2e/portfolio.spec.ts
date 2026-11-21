@@ -1,6 +1,32 @@
 import { expect, test } from "@playwright/test";
 
+test("lights nearby buttons while preserving the native cursor", async ({ page }) => {
+  await page.goto("/projects");
+  const spotlight = page.locator(".pointer-spotlight");
+  const search = page.getByRole("button", { name: "Search", exact: true });
+  await expect(search).not.toHaveCSS("cursor", "none");
+
+  if (!await page.evaluate(() => matchMedia("(any-hover: hover) and (any-pointer: fine)").matches)) {
+    await expect(spotlight).toBeHidden();
+    return;
+  }
+
+  const bounds = (await search.boundingBox())!;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height + 125);
+  await expect(spotlight).toHaveJSProperty("hidden", false);
+  await expect(search).toHaveCSS("background-image", /radial-gradient/);
+  await page.mouse.move(8, (page.viewportSize()?.height ?? 400) / 2);
+  await expect(search).toHaveCSS("background-image", "none");
+
+  await search.hover();
+  await expect(search).toHaveCSS("background-image", /radial-gradient/);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(spotlight).toHaveJSProperty("hidden", true);
+  await expect(search).toHaveCSS("background-image", "none");
+});
+
 test("supports keyboard navigation and search dismissal", async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem("cxs-crt-intro-seen", "1"));
   await page.goto("/");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
@@ -32,11 +58,14 @@ test("persists themes and preserves readable reduced-motion layouts", async ({ p
   const root = page.locator("html");
   await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(root).toHaveClass(/\bdark\b/);
+  const background = page.locator(".site-crt");
+  await expect(background).toHaveCSS("background-color", "rgb(9, 28, 27)");
+  await expect(root).not.toHaveClass(/\blenis\b/);
   await page.getByLabel("Color theme").selectOption("light");
+  await expect(root).toHaveAttribute("data-theme", "light");
   await page.reload();
   await expect(root).toHaveAttribute("data-theme", "light");
   await expect(page.getByRole("heading", { name: "Building for the web." })).toBeVisible();
-  const background = page.locator(".site-crt");
   await expect(background).toBeVisible();
   await expect(background).toHaveCSS("position", "fixed");
   await expect(background).toHaveCSS("pointer-events", "none");
