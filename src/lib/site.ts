@@ -6,10 +6,10 @@ export const site = {
   name: process.env.PORTFOLIO_NAME?.trim(),
   bio: process.env.PORTFOLIO_BIO?.trim(),
   skills: [...new Set((process.env.PORTFOLIO_SKILLS ?? "").split(",").map((skill) => skill.trim()).filter(Boolean))],
-  github: process.env.PORTFOLIO_GITHUB_URL?.trim(),
+  github: process.env.PORTFOLIO_GITHUB_URL?.trim() || "https://github.com/cxs-bit",
   linkedin: process.env.PORTFOLIO_LINKEDIN_URL?.trim(),
-  instagram: process.env.PORTFOLIO_INSTAGRAM_URL?.trim(),
-  email: process.env.PORTFOLIO_EMAIL?.trim(),
+  instagram: process.env.PORTFOLIO_INSTAGRAM_URL?.trim() || "https://www.instagram.com/cxsoxa/",
+  email: process.env.PORTFOLIO_EMAIL?.trim() || "carlosxaviersosa24@gmail.com",
   contact: process.env.PORTFOLIO_CONTACT_URL?.trim(),
 };
 

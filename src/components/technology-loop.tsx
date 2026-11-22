@@ -18,6 +18,7 @@ export function TechnologyLoop({ title, logos }: { title: string; logos: Technol
 
   return (
     <section className="home-technologies" aria-labelledby="technology-title">
+      <h2 id="technology-title" className="site-wrap technology-heading">{title}</h2>
       {animated ? (
         <LogoLoop
           className="technology-loop"
@@ -46,7 +47,6 @@ export function TechnologyLoop({ title, logos }: { title: string; logos: Technol
           ))}
         </ul>
       )}
-      <h2 id="technology-title" className="site-wrap technology-heading">{title}</h2>
     </section>
   );
 }

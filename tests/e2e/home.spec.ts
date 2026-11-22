@@ -9,6 +9,14 @@ test.describe("server-rendered homepage", () => {
     const feature = page.getByRole("region", { name: "Rally Scoring" });
     await expect(feature.getByRole("heading")).toBeVisible();
     await expect(feature.getByRole("link", { name: "View project" })).toHaveAttribute("href", "https://rally-scoring.vercel.app/");
+    await expect(feature.getByRole("link", { name: "All projects" })).toHaveAttribute("href", "/projects");
+    const about = page.getByRole("region", { name: "About me" });
+    await expect(about.getByRole("link", { name: "Read my devlog" })).toHaveAttribute("href", "/blog");
+    await page.getByRole("link", { name: "Contact me", exact: true }).click();
+    const contact = page.getByRole("region", { name: "Contact me" });
+    await expect(contact).toBeFocused();
+    await expect(contact.getByRole("link", { name: "Instagram" })).toHaveAttribute("href", /^https?:/);
+    await expect(contact.getByRole("link", { name: "GitHub" })).toHaveAttribute("href", /^https?:/);
   });
 });
 

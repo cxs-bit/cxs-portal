@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
-import { ArrowDown01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
+import Link from "next/link";
+import {
+  ArrowDown01Icon, ArrowRight01Icon, GithubIcon, InstagramIcon, Linkedin01Icon, Link01Icon, Mail01Icon,
+} from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CrtIntro } from "@/components/crt-intro";
 import { FeaturedProject } from "@/components/featured-project";
@@ -26,12 +29,11 @@ export default async function HomePage() {
     ? new Intl.Segmenter("en", { granularity: "sentence" }).segment(site.bio).containing(0)?.segment.trim()
     : "I document what I build and the decisions that shape it.";
   const contactLinks = [
-    { label: "LinkedIn", href: site.linkedin },
-    { label: "Instagram", href: site.instagram },
-    { label: "GitHub", href: site.github },
-    { label: "Contact", href: site.contact },
+    { label: "Instagram", href: site.instagram, icon: InstagramIcon },
+    { label: "GitHub", href: site.github, icon: GithubIcon },
+    { label: "LinkedIn", href: site.linkedin, icon: Linkedin01Icon },
+    { label: "Contact", href: site.contact, icon: Link01Icon },
   ].filter(({ href }) => href);
-  const hasContact = Boolean(site.email || contactLinks.length);
 
   return (
     <>
@@ -54,7 +56,7 @@ export default async function HomePage() {
             <a href="#featured-work" className={buttonVariants({ size: "lg" })}>
               Explore the work<HugeiconsIcon icon={ArrowDown01Icon} aria-hidden="true" />
             </a>
-            {hasContact && <a href="#contact" className="text-link">Contact me</a>}
+            <a href="#contact" className="text-link">Contact me</a>
           </div>
         </div>
       </HeroMotion>
@@ -66,9 +68,9 @@ export default async function HomePage() {
             description: foundation.description,
             href: `/blog/${foundation.slug}`,
             screenshot: {
-              src: "/images/rally-dashboard.png",
-              alt: "Rally Educativo Ecológico dashboard showing teams, stations, and scores",
-              aspectRatio: 1907 / 930,
+              src: "/images/starting-point-crt.webp",
+              alt: "The CRT television from the portfolio’s opening scene",
+              aspectRatio: 16 / 9,
             },
           }}
           action="Read the build note"
@@ -87,25 +89,33 @@ export default async function HomePage() {
         <div className="home-details-copy">
           {site.name && <p className="about-name">{site.name}</p>}
           <p>{bio}</p>
+          <Link href="/blog" className="text-link">Read my devlog<HugeiconsIcon icon={ArrowRight01Icon} size={16} aria-hidden="true" /></Link>
         </div>
       </section>
 
-      {hasContact && (
-        <section id="contact" className="site-wrap home-details" aria-labelledby="contact-title" tabIndex={-1}>
-          <h2 id="contact-title">Contact me</h2>
-          <div className="home-details-copy">
-            <p>Have a project in mind or something you’d like to talk through? I’d like to hear from you.</p>
-            <div className="home-actions">
-              {site.email && (
-                <a href={`mailto:${site.email}`} className={buttonVariants({ size: "lg" })}>
-                  <HugeiconsIcon icon={Mail01Icon} aria-hidden="true" />Email me
-                </a>
-              )}
-              {contactLinks.map(({ label, href }) => <a key={label} href={href} className="text-link">{label}</a>)}
-            </div>
+      <section id="contact" className="site-wrap home-details" aria-labelledby="contact-title" tabIndex={-1}>
+        <h2 id="contact-title">Contact me</h2>
+        <div className="home-details-copy">
+          <p>Have a project in mind or something you’d like to talk through? I’d like to hear from you.</p>
+          <div className="home-actions">
+            {site.email && (
+              <a href={`mailto:${site.email}`} className={buttonVariants({ size: "lg" })}>
+                <HugeiconsIcon icon={Mail01Icon} aria-hidden="true" />Email me
+              </a>
+            )}
+            {contactLinks.map(({ label, href, icon }) => (
+              <a key={label} href={href} className="text-link social-label">
+                <HugeiconsIcon icon={icon} size={20} aria-hidden="true" />{label}
+              </a>
+            ))}
+            {!site.linkedin && (
+              <span className="contact-placeholder social-label">
+                <HugeiconsIcon icon={Linkedin01Icon} size={20} aria-hidden="true" />LinkedIn · Coming soon
+              </span>
+            )}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
     </>
   );
 }

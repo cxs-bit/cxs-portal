@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { GithubIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import "@fontsource-variable/figtree";
 import "./globals.css";
 import { NavigationDock } from "@/components/navigation-dock";
@@ -35,7 +37,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <nav aria-label="Footer navigation">
                 <Link href="/projects">Projects</Link>
                 <Link href="/blog">Devlog</Link>
-                {site.github && <a href={site.github}>GitHub</a>}
+                {site.github && (
+                  <a href={site.github} className="social-label">
+                    <HugeiconsIcon icon={GithubIcon} size={16} aria-hidden="true" />GitHub
+                  </a>
+                )}
                 {site.contact && <a href={site.contact}>Contact</a>}
               </nav>
             </div>
