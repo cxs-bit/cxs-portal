@@ -5,10 +5,21 @@ test.describe("server-rendered homepage", () => {
 
   test("shows the build note and its navigation before JavaScript runs", async ({ page }) => {
     await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeVisible();
     const feature = page.getByRole("region", { name: "A starting point" });
     await expect(feature.getByRole("heading")).toBeVisible();
     await expect(feature.getByRole("link", { name: "Read the build note" })).toHaveAttribute("href", "/blog/starting-point");
   });
+});
+
+test("keeps the headline visible when the TV intro is unavailable", async ({ page }) => {
+  await page.route("**/models/crt-tv.glb", route => route.abort());
+  await page.goto("/");
+  await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "static");
+  const heading = page.getByRole("heading", { name: "Building for the web Showing the work" });
+  await expect(heading).toBeVisible();
+  await expect(heading.locator(".text-type__cursor")).toHaveCount(0);
+  await expect(heading.locator("[data-pending]")).toHaveCount(0);
 });
 
 test("jumps from the hero to the published build note by keyboard at 320px", async ({ page }) => {
@@ -23,7 +34,7 @@ test("jumps from the hero to the published build note by keyboard at 320px", asy
 
   const feature = page.getByRole("region", { name: "A starting point" });
   await expect(feature).toBeFocused();
-  await expect(feature.getByRole("img", { name: /CXS wordmark/ })).toBeInViewport();
+  await expect(feature.getByRole("img", { name: /Rally Educativo Ecológico dashboard/ })).toBeInViewport();
   const buildNote = feature.getByRole("link", { name: "Read the build note" });
   await page.keyboard.press("Tab");
   await expect(buildNote).toBeFocused();

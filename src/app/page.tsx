@@ -6,6 +6,7 @@ import { FeaturedProject } from "@/components/featured-project";
 import { HeroMotion } from "@/components/hero-motion";
 import { HomeFeature } from "@/components/home-feature";
 import { HomeTechnologies } from "@/components/home-technologies";
+import { TextType } from "@/components/text-type";
 import { buttonVariants } from "@/components/ui/button";
 import { getPublishedPost } from "@/lib/posts";
 import { projects, site } from "@/lib/site";
@@ -14,6 +15,8 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: { url: "/", title: site.title, description: site.description, siteName: site.title },
 };
+
+const heroTitle = ["Building for the web", "Showing the work"];
 
 export default async function HomePage() {
   const initialProject = projects[0];
@@ -36,8 +39,15 @@ export default async function HomePage() {
       <HeroMotion>
         <div className="site-wrap hero-copy">
           <h1 id="hero-title" data-hero-enter>
-            Building for the web.{" "}
-            <span className="hero-title-continuation">Showing the work<span>.</span></span>
+            <span className="sr-only">{heroTitle.join(" ")}</span>
+            <TextType
+              text={heroTitle}
+              typingSpeed={75}
+              pauseDuration={1500}
+              deletingSpeed={50}
+              mistakes={0.4}
+              variableSpeed={{ min: 60, max: 120 }}
+            />
           </h1>
           <p className="hero-description" data-hero-enter>{heroLine}</p>
           <div className="home-actions" data-hero-enter>
@@ -55,7 +65,11 @@ export default async function HomePage() {
             title: foundation.title,
             description: foundation.description,
             href: `/blog/${foundation.slug}`,
-            screenshot: { src: "/images/starting-point-crt.webp", alt: "The CXS wordmark glowing on the portfolio’s CRT screen" },
+            screenshot: {
+              src: "/images/rally-dashboard.png",
+              alt: "Rally Educativo Ecológico dashboard showing teams, stations, and scores",
+              aspectRatio: 1907 / 930,
+            },
           }}
           action="Read the build note"
         />

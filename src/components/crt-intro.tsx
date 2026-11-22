@@ -23,22 +23,9 @@ export function CrtIntro() {
   const logoRef = useRef<HTMLDivElement>(null);
   const enterRef = useRef<HTMLButtonElement>(null);
   const powerRef = useRef<HTMLButtonElement>(null);
-  const distanceRef = useRef(0);
   const lenisRef = useRef<Lenis | null>(null);
   const syncIntroRef = useRef<((force?: boolean) => void) | null>(null);
-
-  function skipIntro() {
-    const top = distanceRef.current;
-    lenisRef.current?.scrollTo(top, { immediate: true, force: true });
-    if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top, behavior: "instant" });
-    syncIntroRef.current?.(true);
-  }
-
-  function enterPortfolio() {
-    const lenis = lenisRef.current;
-    if (lenis) lenis.scrollTo(distanceRef.current, { duration: 0.95, onComplete: skipIntro });
-    else skipIntro();
-  }
+  const settleRef = useRef<((duration: number) => void) | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
@@ -69,6 +56,8 @@ export function CrtIntro() {
     const stage = stageRef.current;
     const logo = logoRef.current;
     const sceneElement = stage.parentElement!;
+    const page = document.getElementById("portfolio-page")!;
+    page.dataset.crtIntro = "loading";
     const request = new AbortController();
     let cancelled = false;
     let dispose = () => {};
@@ -84,7 +73,6 @@ export function CrtIntro() {
       ]);
       if (cancelled) return;
       const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-      const page = document.getElementById("portfolio-page")!;
       const background = document.querySelector<HTMLElement>(".site-crt");
       // Only the glass writes clear pixels; the room fully masks the live page.
       renderer.setClearColor(0x0b0c0d, 1);
@@ -278,6 +266,8 @@ export function CrtIntro() {
       const startLook = center.clone().add(new THREE.Vector3(0, cabinetHeight * 0.035, 0));
       let width = 0;
       let height = 0;
+      let entry = 0;
+      const returnStart = () => entry - THREE.MathUtils.clamp(Math.round(entry * 0.13), 56, 104);
       const vertices = screen.geometry.getAttribute("position");
       const glass = Array.from({ length: vertices.count }, (_, index) =>
         new THREE.Vector3().fromBufferAttribute(vertices, index).applyMatrix4(screen.matrixWorld)
@@ -286,8 +276,10 @@ export function CrtIntro() {
       const pixel = new THREE.Vector2();
       const target = new THREE.Vector3();
       const render = (scrollY: number, progress: number) => {
-        camera.position.lerpVectors(start, end, progress);
-        camera.lookAt(target.copy(startLook).lerp(screenCenter, progress));
+        // Soften the ends of the zoom while the camera still tracks small scroll changes.
+        const cameraProgress = THREE.MathUtils.lerp(progress, THREE.MathUtils.smoothstep(progress, 0, 1), 0.5);
+        camera.position.lerpVectors(start, end, cameraProgress);
+        camera.lookAt(target.copy(startLook).lerp(screenCenter, cameraProgress));
         camera.updateMatrixWorld();
         aperture.makeEmpty();
         for (const vertex of glass) {
@@ -319,9 +311,12 @@ export function CrtIntro() {
         const scale = screenWidth / width;
         // Fit the full CRT signal into the projected glass without resizing its GPU buffers.
         if (background) background.style.transform = `translate(${left}px, ${top}px) scale(${scale}, ${screenHeight / height})`;
-        page.style.transform = `translate(${left}px, ${top + scrollY - distanceRef.current}px) scale(${scale})`;
+        page.style.transform = `translate(${left}px, ${top + scrollY - entry}px) scale(${scale})`;
         page.style.setProperty("--screen-height", `${screenHeight / scale}px`);
         page.style.setProperty("--content-opacity", String(THREE.MathUtils.smoothstep(progress, 0.55, 1)));
+        const dockReveal = THREE.MathUtils.smoothstep(progress, 0.77, 0.98);
+        page.style.setProperty("--dock-reveal", String(dockReveal));
+        page.style.setProperty("--dock-visibility", dockReveal > 0 ? "visible" : "hidden");
         const x = (left + right) / 2;
         const y = (top + bottom) / 2;
         logo.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%) scale(${scale * width / 480})`;
@@ -356,34 +351,107 @@ export function CrtIntro() {
         }
       }
       let showing: boolean | undefined;
+      let returning = false;
+      let settling = false;
       let lastScrollY = -1;
-      const scroll = (force = false) => {
+      let edgeTimer: number | undefined;
+      const clearEdge = () => {
+        window.clearTimeout(edgeTimer);
+        page.classList.remove("crt-page-edge");
+        page.style.removeProperty("--crt-edge-offset");
+      };
+      const clearPreview = () => {
+        background?.style.removeProperty("transform");
+        page.style.removeProperty("transform");
+        page.style.removeProperty("--screen-height");
+        page.style.removeProperty("--content-opacity");
+        page.style.removeProperty("--dock-reveal");
+        page.style.removeProperty("--dock-visibility");
+      };
+
+      function settle(duration: number) {
+        const lenis = lenisRef.current;
+        const top = entry;
+        settling = true;
+        if (lenis && Math.abs(lenis.actualScroll - lenis.animatedScroll) > 1) {
+          // A native jump can arrive before Lenis has observed the new position.
+          lenis.resize();
+        }
+        if (!duration || !lenis) {
+          lenis?.scrollTo(top, { immediate: true, force: true });
+          if (Math.abs(window.scrollY - top) > 1) window.scrollTo({ top, behavior: "instant" });
+          scroll(true);
+          settling = false;
+          return;
+        }
+
+        if (showing && window.scrollY >= top) {
+          // A fast flick can cross the entire handoff in one frame.
+          lenis.scrollTo(top - 24, { immediate: true, force: true });
+        }
+        lenis.scrollTo(top, {
+          duration,
+          easing: (progress) => 1 - (1 - progress) ** 3,
+          lock: true,
+          force: true,
+          onComplete: () => { settling = false; },
+        });
+      }
+
+      function settleEdge() {
+        const lenis = lenisRef.current;
+        // A busy frame must not cut short an upward gesture that is still in flight.
+        if (lenis?.isTouching || lenis?.isScrolling === "smooth") {
+          edgeTimer = window.setTimeout(settleEdge, 160);
+        } else if (!showing && window.scrollY < entry - 1) {
+          settle(0);
+        }
+      }
+
+      function scroll(force = false) {
         const scrollY = window.scrollY;
         if (!force && scrollY === lastScrollY) return;
+        const movingDown = scrollY > lastScrollY;
         lastScrollY = scrollY;
-        const progress = THREE.MathUtils.clamp(scrollY / distanceRef.current, 0, 1);
+
+        const span = returning ? returnStart() : entry;
+        if (showing && !settling && movingDown && lenisRef.current && scrollY >= span * 0.9) {
+          settle(0.42);
+          if (scrollY >= entry) return;
+        }
+
+        const backingOut = showing === false && scrollY <= returnStart();
         // Touch viewports can settle just below the requested CSS pixel.
-        const active = scrollY < distanceRef.current - 1;
+        const active = showing === false ? backingOut : scrollY < entry - 1;
+        if (!active && scrollY < entry - 1) {
+          // Keep the hero visually at its resting point until the visitor commits to leaving it.
+          window.clearTimeout(edgeTimer);
+          page.classList.add("crt-page-edge");
+          page.style.setProperty("--crt-edge-offset", `${scrollY - entry}px`);
+          if (!settling) edgeTimer = window.setTimeout(settleEdge, 160);
+        } else {
+          clearEdge();
+        }
+
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
+          returning = backingOut;
           page.classList.toggle("crt-page-preview", active);
           page.inert = active;
+          page.dataset.crtIntro = active ? "active" : wasShowing ? "entered" : "ready";
           setInIntro(active);
           if (!active) {
-            background?.style.removeProperty("transform");
-            page.style.removeProperty("transform");
-            page.style.removeProperty("--screen-height");
-            page.style.removeProperty("--content-opacity");
+            clearPreview();
             if (wasShowing) {
               try { sessionStorage.setItem(sessionKey, "1"); } catch { /* Storage is optional. */ }
               document.getElementById("main")?.focus({ preventScroll: true });
             }
           }
         }
-        if (active) render(scrollY, progress);
+        if (active) render(scrollY, THREE.MathUtils.clamp(scrollY / (returning ? returnStart() : entry), 0, 1));
         syncWallLights();
-      };
+      }
       const onNativeScroll = () => scroll();
       const resize = () => {
         width = stage.clientWidth;
@@ -399,8 +467,8 @@ export function CrtIntro() {
         const fitDistance = Math.min(screenSize.y, screenSize.x / camera.aspect) / (2 * Math.tan(halfFov));
         end.copy(screenCenter).addScaledVector(normal, fitDistance * 0.96);
         camera.updateProjectionMatrix();
-        distanceRef.current = Math.round(height * 0.78);
-        page.style.marginTop = distanceRef.current + "px";
+        entry = Math.round(height * 0.78);
+        page.style.marginTop = `${entry}px`;
       };
       // A slow model download can arrive after the visitor has started reading.
       // Keep that page in place and let them scroll up to see the television.
@@ -413,15 +481,18 @@ export function CrtIntro() {
       try { startOnPage ||= Boolean(sessionStorage.getItem(sessionKey)); } catch { /* Storage is optional. */ }
       const initialScroll = window.scrollY;
       resize();
-      if (startOnPage) window.scrollTo({ top: initialScroll + distanceRef.current, behavior: "instant" });
+      if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
+      if (lateModel) page.dataset.crtIntro = "static";
       syncIntroRef.current = scroll;
+      settleRef.current = settle;
       const onResize = () => {
-        const offset = window.scrollY - distanceRef.current;
+        const offset = window.scrollY - entry;
         resize();
-        if (offset >= -1) window.scrollTo({ top: distanceRef.current + Math.max(0, offset), behavior: "instant" });
+        if (!showing) window.scrollTo({ top: entry + Math.max(0, offset), behavior: "instant" });
         lenisRef.current?.resize();
+        if (settling) settle(0);
         scroll(true);
       };
       window.addEventListener("resize", onResize);
@@ -433,6 +504,8 @@ export function CrtIntro() {
         document.removeEventListener("visibilitychange", syncWallLights);
         stopWallLights();
         syncIntroRef.current = null;
+        settleRef.current = null;
+        clearEdge();
         page.style.removeProperty("margin-top");
         page.inert = false;
         reflection.geometry.dispose();
@@ -450,17 +523,23 @@ export function CrtIntro() {
           }
         });
         (Array.isArray(originalMaterial) ? originalMaterial : [originalMaterial]).forEach((material) => material.dispose());
-        background?.style.removeProperty("transform");
         page.classList.remove("crt-page-preview");
-        page.style.removeProperty("transform");
-        page.style.removeProperty("--screen-height");
-        page.style.removeProperty("--content-opacity");
+        clearPreview();
         renderer.dispose();
         renderer.domElement.remove();
       };
     }
-    void setup().catch(() => { if (!cancelled) dispose(); });
-    return () => { cancelled = true; request.abort(); dispose(); };
+    void setup().catch(() => {
+      if (cancelled) return;
+      dispose();
+      page.dataset.crtIntro = "static";
+    });
+    return () => {
+      cancelled = true;
+      request.abort();
+      dispose();
+      delete page.dataset.crtIntro;
+    };
   }, [enabled]);
 
   useEffect(() => {
@@ -483,7 +562,7 @@ export function CrtIntro() {
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
-          skipIntro();
+          settleRef.current?.(0);
         } else if (event.key === "Tab") {
           event.preventDefault();
           event.currentTarget.dataset.keyboardCue = "";
@@ -532,7 +611,7 @@ export function CrtIntro() {
           </div>
           <div className="crt-intro-controls">
             <p>Scroll to enter</p>
-            <button ref={enterRef} type="button" onClick={enterPortfolio}>Enter portfolio</button>
+            <button ref={enterRef} type="button" onClick={() => settleRef.current?.(0.86)}>Enter portfolio</button>
           </div>
         </div>
     </div>, document.body,

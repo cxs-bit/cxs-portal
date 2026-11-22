@@ -109,8 +109,9 @@ deployment if a release check fails.
 
 The homepage intro uses [CRT-TV by SketchyBot](https://sketchfab.com/3d-models/crt-tv-5f827ab96d184431a0179ceb7c463157), distributed under the [Sketchfab Standard license](https://sketchfab.com/licenses). The model is stored at `public/models/crt-tv.glb`.
 
-`public/images/starting-point-crt.webp` is a screenshot of the portfolio’s CRT
-intro and accompanies the featured build note.
+The featured build note uses `public/images/rally-dashboard.png` as a
+placeholder. The original CRT intro screenshot is stored at
+`public/images/starting-point-crt.webp`.
 
 The shared layout uses a fixed React Bits CRTWarp background. The dark
 background stays visible when reduced motion is enabled or WebGL2 is

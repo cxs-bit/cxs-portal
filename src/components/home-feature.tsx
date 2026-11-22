@@ -14,7 +14,11 @@ export function HomeFeature({ item, action }: { item: Project; action: string })
 
   return (
     <section id="featured-work" className="site-wrap home-feature" aria-labelledby="featured-title" tabIndex={-1}>
-      <div className="feature-frame" data-screenshot={Boolean(item.screenshot)}>
+      <div
+        className="feature-frame"
+        data-screenshot={Boolean(item.screenshot)}
+        style={{ aspectRatio: item.screenshot?.aspectRatio }}
+      >
         {item.screenshot ? (
           <Image
             src={item.screenshot.src}

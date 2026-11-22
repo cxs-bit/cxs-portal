@@ -20,7 +20,7 @@ export type Project = {
   title: string;
   description: string;
   href: string;
-  screenshot?: { src: string; alt: string };
+  screenshot?: { src: string; alt: string; aspectRatio?: number };
 };
 
 export const projects: readonly Project[] = [];

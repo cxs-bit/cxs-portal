@@ -82,7 +82,8 @@ test("keeps the dark palette and preserves readable reduced-motion layouts", asy
   await expect(background).toHaveCSS("background-color", "rgb(9, 28, 27)");
   await expect(root).not.toHaveClass(/\blenis\b/);
   await expect(page.getByRole("combobox", { name: "Color theme" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Building for the web. Showing the work." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeVisible();
+  await expect(page.locator(".text-type__cursor")).toHaveCount(0);
   await expect(background).toBeVisible();
   await expect(background).toHaveCSS("position", "fixed");
   await expect(background).toHaveCSS("pointer-events", "none");

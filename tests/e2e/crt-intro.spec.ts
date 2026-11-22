@@ -25,7 +25,16 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   await page.keyboard.press("Tab");
   await expect(enter).toBeFocused();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Building for the web. Showing the work." })).toBeVisible();
+  const heading = page.getByRole("heading", { name: "Building for the web Showing the work" });
+  const cursor = heading.locator(".text-type__cursor");
+  await expect(heading).toBeVisible();
+  await expect(cursor).toBeVisible();
+  const text = heading.locator(".text-type");
+  const height = await text.evaluate(element => element.clientHeight);
+  await expect(heading.locator("[data-pending]").first()).toBeAttached();
+  await expect(cursor).toHaveCount(0, { timeout: 15000 });
+  await expect(heading.locator("[data-pending]")).toHaveCount(0);
+  expect(await text.evaluate(element => element.clientHeight)).toBe(height);
   await expect(enter).toHaveCount(0);
   await expect(page.locator("#main")).toBeFocused();
   await expect(page.locator(".site-dock")).toBeVisible();
@@ -43,6 +52,7 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   await expect(noise).toHaveCSS("clip-path", /polygon\(evenodd/);
   await expect(page.locator("html")).toHaveClass(/\blenis\b/);
   const portfolio = page.locator("#portfolio-page");
+  const dock = page.locator(".site-dock");
   const logo = intro.locator(".crt-intro-logo");
   const background = page.locator(".site-crt canvas");
   const viewport = page.viewportSize()!;
@@ -56,20 +66,40 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   const distance = await portfolio.evaluate(node => parseFloat(node.style.marginTop));
   // The mobile heading crosses the center of the glass earlier in the zoom.
   const narrow = viewport.width < 700;
-  await page.mouse.wheel(0, Math.round(distance * (narrow ? 0.68 : 0.775)));
+  const midpoint = narrow ? 0.68 : 0.775;
+  await page.mouse.wheel(0, Math.round(distance * midpoint));
   await expect.poll(() => portfolio.evaluate(node => Number(getComputedStyle(node).opacity))).toBeCloseTo(narrow ? 0.2 : 0.5, 1);
   await expect.poll(() => logo.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(0.1);
   await expect.poll(async () => (await background.boundingBox())?.width).toBeGreaterThan(initialWidth);
+  await page.mouse.wheel(0, Math.round(distance * (0.85 - midpoint)));
+  await expect.poll(() => dock.evaluate(node => Number(getComputedStyle(node).opacity))).toBeGreaterThan(0.1);
+  await expect.poll(() => dock.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(1);
+  await expect(portfolio).toHaveJSProperty("inert", true);
+
   await page.mouse.wheel(0, 4000);
   await expect(intro).toHaveCount(0);
   await expect(noise).toHaveCount(0);
   await expect(portfolio).toHaveCSS("opacity", "1");
   await expect.poll(() => background.boundingBox()).toEqual(frame);
   expect(await heading?.evaluate(node => node === document.querySelector("#hero-title"))).toBe(true);
-  await expect.poll(() => page.evaluate(() =>
-    document.documentElement.scrollHeight - window.innerHeight - window.scrollY,
-  )).toBeLessThanOrEqual(2);
+  const distanceFromHero = () => page.evaluate(entry => Math.abs(window.scrollY - entry), distance);
+  await expect.poll(distanceFromHero).toBeLessThanOrEqual(1);
   await expect(page.locator("html")).not.toHaveClass(/\blenis-scrolling\b/);
+
+  await page.mouse.wheel(0, 300);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(distance + 75);
+  await expect(page.locator("html")).not.toHaveClass(/\blenis-scrolling\b/);
+
+  const heldAtHero = await page.evaluate(entry => new Promise<boolean>(resolve => {
+    window.addEventListener("scroll", () => {
+      resolve(document.getElementById("portfolio-page")!.classList.contains("crt-page-edge"));
+    }, { once: true });
+    window.scrollTo({ top: entry - 30, behavior: "instant" });
+  }), distance);
+  expect(heldAtHero).toBe(true);
+  await expect(intro).toHaveCount(0);
+  await expect.poll(distanceFromHero).toBeLessThanOrEqual(1);
+
   await page.evaluate(() => new Promise<void>((resolve) => {
     window.addEventListener("scroll", () => resolve(), { once: true });
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -94,7 +124,7 @@ test("keeps a slow-loading model above the page the visitor is reading", async (
   await page.goto("/");
   const portfolio = page.locator("#portfolio-page");
   await expect.poll(() => portfolio.evaluate(element => parseFloat(element.style.marginTop)), { timeout: 20000 }).toBeGreaterThan(0);
-  await expect(page.getByRole("heading", { name: "Building for the web. Showing the work." })).toBeInViewport();
+  await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeInViewport();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await expect(page.getByRole("dialog", { name: "Enter the portfolio" })).toBeVisible({ timeout: 15000 });
