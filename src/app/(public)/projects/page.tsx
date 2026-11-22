@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { Folder01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { buttonVariants } from "@/components/ui/button";
@@ -28,7 +29,23 @@ export default async function ProjectsPage() {
         <ul className="project-list">
           {projects.map((project) => (
             <li key={project.href}>
-              <Link href={project.href}><h2>{project.title}</h2><p>{project.description}</p></Link>
+              <div className="project-intro">
+                <div><h2>{project.title}</h2><p>{project.description}</p></div>
+                <a className="text-link" href={project.href}>Visit {project.title}</a>
+              </div>
+              {project.gallery && (
+                <div className="project-gallery">
+                  {project.gallery.map(({ src, alt, caption, width, height }, index) => (
+                    <figure key={src}>
+                      <a href={src}>
+                        <Image src={src} alt={alt} width={width} height={height}
+                          sizes={index === 0 ? "(max-width: 90rem) 89vw, 80rem" : "(max-width: 48rem) 89vw, (max-width: 90rem) 44vw, 40rem"} />
+                      </a>
+                      <figcaption>{caption}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
             </li>
           ))}
         </ul>

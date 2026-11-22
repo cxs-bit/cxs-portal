@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const posts = await listPublishedPosts();
   const entries = [
     ...pages.map((result) => ({ result })),
-    ...projects.map((project) => ({ result: { ...project, kind: "project" as const } })),
+    ...projects.map(({ title, href, description }) => ({ result: { title, href, description, kind: "project" as const } })),
     ...posts.map((post) => ({
       result: { title: post.title, description: post.description, href: `/blog/${post.slug}`, kind: "post" as const },
       keywords: post.tags,

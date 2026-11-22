@@ -33,7 +33,7 @@ The site is named CXS Portfolio. Use owner-provided facts, profile details, link
 ## Evidence on Hand
 
 - `content/blog/starting-point.mdx` is the first published devlog entry. It documents the portfolio itself and describes what future entries will cover.
-- `src/lib/site.ts` contains the project catalog and optional owner profile details. The project catalog is currently empty.
+- `src/lib/site.ts` contains the project catalog and optional owner profile details. Rally Scoring is the first entry.
 
 ## Product Principles
 

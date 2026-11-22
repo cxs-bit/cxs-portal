@@ -80,10 +80,8 @@ export default async function HomePage() {
         />
       )}
 
-      <hr className="site-wrap home-divider" aria-hidden="true" />
       <HomeTechnologies skills={site.skills} />
 
-      <hr className="site-wrap home-divider" aria-hidden="true" />
       <section className="site-wrap home-details" aria-labelledby="about-title">
         <h2 id="about-title">About me</h2>
         <div className="home-details-copy">
@@ -93,23 +91,20 @@ export default async function HomePage() {
       </section>
 
       {hasContact && (
-        <>
-          <hr className="site-wrap home-divider" aria-hidden="true" />
-          <section id="contact" className="site-wrap home-details" aria-labelledby="contact-title" tabIndex={-1}>
-            <h2 id="contact-title">Contact me</h2>
-            <div className="home-details-copy">
-              <p>Have a project in mind or something you’d like to talk through? I’d like to hear from you.</p>
-              <div className="home-actions">
-                {site.email && (
-                  <a href={`mailto:${site.email}`} className={buttonVariants({ size: "lg" })}>
-                    <HugeiconsIcon icon={Mail01Icon} aria-hidden="true" />Email me
-                  </a>
-                )}
-                {contactLinks.map(({ label, href }) => <a key={label} href={href} className="text-link">{label}</a>)}
-              </div>
+        <section id="contact" className="site-wrap home-details" aria-labelledby="contact-title" tabIndex={-1}>
+          <h2 id="contact-title">Contact me</h2>
+          <div className="home-details-copy">
+            <p>Have a project in mind or something you’d like to talk through? I’d like to hear from you.</p>
+            <div className="home-actions">
+              {site.email && (
+                <a href={`mailto:${site.email}`} className={buttonVariants({ size: "lg" })}>
+                  <HugeiconsIcon icon={Mail01Icon} aria-hidden="true" />Email me
+                </a>
+              )}
+              {contactLinks.map(({ label, href }) => <a key={label} href={href} className="text-link">{label}</a>)}
             </div>
-          </section>
-        </>
+          </div>
+        </section>
       )}
     </>
   );

@@ -17,38 +17,36 @@ export function TechnologyLoop({ title, logos }: { title: string; logos: Technol
   const animated = useSyncExternalStore(subscribe, () => window.matchMedia(motionQuery).matches, () => false);
 
   return (
-    <section className="site-wrap home-technologies" aria-labelledby="technology-title">
-      <h2 id="technology-title" className="technology-heading">{title}</h2>
-      <div className="technology-window">
-        {animated ? (
-          <LogoLoop
-            className="technology-loop"
-            ariaLabel="Technology partners"
-            logos={logos}
-            speed={100}
-            direction="right"
-            logoHeight={50}
-            gap={56}
-            hoverSpeed={20}
-            scaleOnHover={false}
-            layout="arc"
-            bend={0.6}
-            magnify={0}
-            labels="hover"
-            muted={0}
-            fadeOut
-            fadeOutWidth={0.12}
-          />
-        ) : (
-          <ul className="technology-list" role="list">
-            {logos.map(({ title, node, href }) => (
-              <li key={title}>
-                {href ? <a href={href}>{node}{title}</a> : <>{node}{title}</>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+    <section className="home-technologies" aria-labelledby="technology-title">
+      {animated ? (
+        <LogoLoop
+          className="technology-loop"
+          ariaLabel="Technology partners"
+          logos={logos}
+          speed={100}
+          direction="right"
+          logoHeight={75}
+          gap={56}
+          hoverSpeed={20}
+          scaleOnHover={false}
+          layout="arc"
+          bend={0.6}
+          magnify={0}
+          labels="hover"
+          muted={0}
+          fadeOut
+          fadeOutWidth={0.12}
+        />
+      ) : (
+        <ul className="site-wrap technology-list" role="list">
+          {logos.map(({ title, node, href }) => (
+            <li key={title}>
+              {href ? <a href={href}>{node}{title}</a> : <>{node}{title}</>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <h2 id="technology-title" className="site-wrap technology-heading">{title}</h2>
     </section>
   );
 }

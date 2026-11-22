@@ -20,7 +20,53 @@ export type Project = {
   title: string;
   description: string;
   href: string;
+  gallery?: readonly { src: string; alt: string; caption: string; width: number; height: number }[];
   screenshot?: { src: string; alt: string; aspectRatio?: number };
 };
 
-export const projects: readonly Project[] = [];
+const rallyDashboard = {
+  src: "/images/projects/rally-scoring/dashboard.webp",
+  alt: "Rally dashboard showing team and station totals, the leading team, and scores awaiting review",
+  aspectRatio: 1440 / 545,
+  caption: "Scoring dashboard",
+  width: 1440,
+  height: 545,
+};
+
+export const projects: readonly Project[] = [{
+  title: "Rally Scoring",
+  description: "A scoring system for the Rally Educativo Ecológico Domingo Savio. Judges score teams at each station, and spectators can follow their progress in the public standings.",
+  href: "https://rally-scoring.vercel.app/",
+  screenshot: rallyDashboard,
+  gallery: [
+    rallyDashboard,
+    {
+      src: "/images/projects/rally-scoring/teams.webp",
+      alt: "Team roster showing member counts, scores, progress, and departure and arrival times",
+      caption: "Team roster",
+      width: 1440,
+      height: 748,
+    },
+    {
+      src: "/images/projects/rally-scoring/stations.webp",
+      alt: "Station list organized by subject, with start and finish roles and question availability",
+      caption: "Rally stations",
+      width: 1440,
+      height: 748,
+    },
+    {
+      src: "/images/projects/rally-scoring/questions.webp",
+      alt: "Question manager showing a multiple-choice item worth 13 points at the natural sciences station",
+      caption: "Station questions",
+      width: 1440,
+      height: 748,
+    },
+    {
+      src: "/images/projects/rally-scoring/results.webp",
+      alt: "Standings ranked by team score, with elapsed time and progress bars for each team",
+      caption: "Team standings",
+      width: 1440,
+      height: 748,
+    },
+  ],
+}];

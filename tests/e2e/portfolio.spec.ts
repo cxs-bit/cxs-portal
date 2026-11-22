@@ -108,11 +108,13 @@ test("keeps the dark palette and preserves readable reduced-motion layouts", asy
   await expect(page.getByRole("link", { name: "Explore the work" })).toBeInViewport();
 
   await dock.getByRole("link", { name: "Projects" }).click();
-  await expect(page.getByRole("heading", { name: "No projects published yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Rally Scoring" })).toBeVisible();
   await expect(dock.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
   await expect(background).toBeVisible();
   await expect(background).toHaveAttribute("data-test-retained", "true");
-  await expect(page.getByRole("link", { name: "Read the devlog" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Visit Rally Scoring" })).toHaveAttribute("href", "https://rally-scoring.vercel.app/");
+  await expect(page.getByRole("img", { name: /Standings ranked by team score/ })).toBeVisible();
+  await dock.getByRole("link", { name: "Devlog" }).click();
   await page.getByRole("link", { name: "A starting point" }).click();
   await expect(page.getByRole("heading", { name: "A starting point" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to the devlog" })).toBeVisible();

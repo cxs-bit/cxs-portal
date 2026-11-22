@@ -34,11 +34,12 @@ export function TextType({ text, typingSpeed, pauseDuration, deletingSpeed, mist
 
   useEffect(() => {
     const root = ref.current;
-    if (!root) return;
+    if (!root || !characters.length) return;
     const page = root.closest<HTMLElement>("#portfolio-page");
     const motion = window.matchMedia("(prefers-reduced-motion: no-preference)");
     let visible = false;
     let started = false;
+    let running = false;
     let from = 0;
     let timeout: number | undefined;
     let corrected = 0;
@@ -51,7 +52,7 @@ export function TextType({ text, typingSpeed, pauseDuration, deletingSpeed, mist
 
     function type(count: number) {
       if (count === characters.length) {
-        wait(pauseDuration, finish);
+        wait(pauseDuration, repeat);
         return;
       }
       const append = () => {
@@ -75,15 +76,21 @@ export function TextType({ text, typingSpeed, pauseDuration, deletingSpeed, mist
       });
     }
 
-    function backspace(count: number) {
-      if (count === from) {
+    function backspace(count: number, stop: number) {
+      if (count === stop) {
+        from = stop;
         type(count);
         return;
       }
       wait(deletingSpeed, () => {
         show(count - 1, { backspace: true });
-        backspace(count - 1);
+        backspace(count - 1, stop);
       });
+    }
+
+    function repeat() {
+      corrected = 0;
+      backspace(characters.length, 0);
     }
 
     const update = () => {
@@ -91,20 +98,29 @@ export function TextType({ text, typingSpeed, pauseDuration, deletingSpeed, mist
       if (!started && stage === "active") root.dataset.awaitingEntry = "";
       const ready = !page || stage === "ready" || stage === "entered";
       if (!ready || !visible || document.hidden || !motion.matches) {
-        if (started) finish();
+        if (running) {
+          running = false;
+          finish();
+        }
         return;
       }
-      if (started) return;
+      if (running) return;
+      running = true;
+      if (started) {
+        from = characters.length;
+        wait(pauseDuration, repeat);
+        return;
+      }
       started = true;
       root.dataset.played = "";
       if (!page || stage === "entered") {
         show(0);
         type(0);
       } else {
-        // A returning visitor can already see the title. Retype only its final word.
+        // Ease into the loop by retyping just the final word on a return visit.
         from = characters.lastIndexOf(" ") + 1;
         show(characters.length, { backspace: true });
-        backspace(characters.length);
+        backspace(characters.length, from);
       }
     };
 

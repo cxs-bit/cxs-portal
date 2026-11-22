@@ -31,9 +31,12 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   await expect(cursor).toBeVisible();
   const text = heading.locator(".text-type");
   const height = await text.evaluate(element => element.clientHeight);
-  await expect(heading.locator("[data-pending]").first()).toBeAttached();
-  await expect(cursor).toHaveCount(0, { timeout: 15000 });
-  await expect(heading.locator("[data-pending]")).toHaveCount(0);
+  const pending = heading.locator("[data-pending]");
+  const completed = cursor.and(heading.locator("[data-idle]"));
+  await expect(pending.first()).toBeAttached();
+  await expect(completed).toBeAttached({ timeout: 15000 });
+  await expect(pending.first()).toBeAttached();
+  await expect(completed).toBeAttached({ timeout: 15000 });
   expect(await text.evaluate(element => element.clientHeight)).toBe(height);
   await expect(enter).toHaveCount(0);
   await expect(page.locator("#main")).toBeFocused();

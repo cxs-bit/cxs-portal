@@ -3,12 +3,12 @@ import { expect, test } from "@playwright/test";
 test.describe("server-rendered homepage", () => {
   test.use({ javaScriptEnabled: false });
 
-  test("shows the build note and its navigation before JavaScript runs", async ({ page }) => {
+  test("shows the featured project and its link before JavaScript runs", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeVisible();
-    const feature = page.getByRole("region", { name: "A starting point" });
+    const feature = page.getByRole("region", { name: "Rally Scoring" });
     await expect(feature.getByRole("heading")).toBeVisible();
-    await expect(feature.getByRole("link", { name: "Read the build note" })).toHaveAttribute("href", "/blog/starting-point");
+    await expect(feature.getByRole("link", { name: "View project" })).toHaveAttribute("href", "https://rally-scoring.vercel.app/");
   });
 });
 
@@ -22,7 +22,7 @@ test("keeps the headline visible when the TV intro is unavailable", async ({ pag
   await expect(heading.locator("[data-pending]")).toHaveCount(0);
 });
 
-test("jumps from the hero to the published build note by keyboard at 320px", async ({ page }) => {
+test("jumps from the hero to the featured project by keyboard at 320px", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 720 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
@@ -32,19 +32,18 @@ test("jumps from the hero to the published build note by keyboard at 320px", asy
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/#featured-work");
 
-  const feature = page.getByRole("region", { name: "A starting point" });
+  const feature = page.getByRole("region", { name: "Rally Scoring" });
   await expect(feature).toBeFocused();
-  await expect(feature.getByRole("img", { name: /Rally Educativo Ecológico dashboard/ })).toBeInViewport();
-  const buildNote = feature.getByRole("link", { name: "Read the build note" });
+  await expect(feature.getByRole("img", { name: /Rally dashboard/ })).toBeInViewport();
+  const projectLink = feature.getByRole("link", { name: "View project" });
   await page.keyboard.press("Tab");
-  await expect(buildNote).toBeFocused();
+  await expect(projectLink).toBeFocused();
   await expect.poll(async () => {
     const dock = (await page.locator(".site-dock").boundingBox())!;
-    const action = (await buildNote.boundingBox())!;
+    const action = (await projectLink.boundingBox())!;
     return action.y + action.height < dock.y;
   }).toBe(true);
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL("/blog/starting-point");
+  await expect(projectLink).toHaveAttribute("href", "https://rally-scoring.vercel.app/");
 });
 
 test("keeps a focused logo still and shows a wrapping list with reduced motion", async ({ page }) => {
@@ -57,8 +56,16 @@ test("keeps a focused logo still and shows a wrapping list with reduced motion",
   const track = loop.locator(".logoloop__track");
   const position = () => track.evaluate((element) => element.style.transform);
   await expect(technologies.getByRole("button")).toHaveCount(0);
-  await expect(loop).toHaveCSS("--logoloop-logoHeight", "50px");
+  await expect(loop).toHaveCSS("--logoloop-logoHeight", "75px");
   await expect(loop).toHaveCSS("--logoloop-gap", "56px");
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 720 });
+    await expect.poll(() => loop.evaluate((element) => {
+      const { left, right } = element.getBoundingClientRect();
+      return left === 0 && right === document.documentElement.clientWidth;
+    })).toBe(true);
+  }
+  await loop.scrollIntoViewIfNeeded();
   const initial = await position();
   await expect.poll(position).not.toBe(initial);
   const logo = loop.getByRole("link").first();
@@ -70,7 +77,7 @@ test("keeps a focused logo still and shows a wrapping list with reduced motion",
     return element.style.transform === before;
   })).toBe(true);
   const paused = await position();
-  await page.getByRole("link", { name: "Read the build note" }).focus();
+  await page.getByRole("link", { name: "View project" }).focus();
   await loop.scrollIntoViewIfNeeded();
   await expect.poll(position).not.toBe(paused);
 
