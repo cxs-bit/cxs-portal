@@ -98,7 +98,8 @@ Check that `pnpm api:generate` leaves the generated client unchanged after
 generation. CI repeats these checks and tests desktop and mobile layouts.
 
 Import the intended Git repository in Vercel using the Next.js preset,
-Node.js 24, and `main` as the production branch. Set the production origin
+Node.js 24, and `prod` as the production branch. Make changes on `dev`
+and promote tested commits to `prod` for release. Set the production origin
 and profile variables. Use the Vercel branch URL to check draft sign-in and
 verify the public pages, search, and share metadata before production.
 After release, check the public routes, sitemap, and 404s against that

@@ -9,6 +9,8 @@ information.
 
 ## Development
 
+- Make all portfolio changes on `dev`. Promote tested commits to `prod`
+  for a production release.
 - Use Next.js App Router, strict TypeScript, Tailwind CSS, and pnpm on  
   Node.js 24. Deploy through Git on Vercel.
 - Default to Server Components. Keep browser-only logic in small client
