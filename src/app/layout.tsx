@@ -3,6 +3,7 @@ import Link from "next/link";
 import { GithubIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "@fontsource-variable/figtree";
 import "./globals.css";
 import { NavigationDock } from "@/components/navigation-dock";
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </footer>
         </div>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
