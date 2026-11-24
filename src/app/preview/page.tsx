@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { PostList } from "@/components/post-list";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ export default async function PreviewPage() {
       </header>
       {authenticated ? (
         <>
+          <Link className="text-link" href="/?tune=portfolio">Open the TV shop with draft channels</Link>
           <PostList posts={await listDrafts()} preview />
           <form className="preview-form" action={async () => {
             "use server";

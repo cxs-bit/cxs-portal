@@ -5,6 +5,8 @@ import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import { formatPostDate, isArticleAsset, type PostSummary } from "@/lib/post-schema";
 
+const articleImageSizes = "(max-width: 39rem) calc(100vw - 2rem), 37rem";
+
 export function Article({ post, preview = false }: {
   post: { summary: PostSummary; body: string };
   preview?: boolean;
@@ -22,11 +24,11 @@ export function Article({ post, preview = false }: {
     const parsedHeight = Number(height);
     if (parsedWidth > 0 && parsedHeight > 0) {
       return <Image src={url} alt={alt ?? ""} width={parsedWidth} height={parsedHeight}
-        sizes="(max-width: 760px) 92vw, 720px" unoptimized={preview} />;
+        sizes={articleImageSizes} unoptimized={preview} />;
     }
     return (
       <span className="article-image">
-        <Image src={url} alt={alt ?? ""} fill sizes="(max-width: 760px) 92vw, 720px" unoptimized={preview} />
+        <Image src={url} alt={alt ?? ""} fill sizes={articleImageSizes} unoptimized={preview} />
       </span>
     );
   }

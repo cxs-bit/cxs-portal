@@ -1,9 +1,9 @@
 import { socialCard, socialSize } from "@/lib/social-card";
 
-export const alt = "CXS Portfolio";
+export const alt = "Carlos Sosa’s portfolio, with the CXS logo on its opening CRT television";
 export const size = socialSize;
 export const contentType = "image/png";
 
 export default function OpenGraphImage() {
-  return socialCard("Building for the web.", "Portfolio");
+  return socialCard("Carlos Sosa", "Software portfolio", "television");
 }

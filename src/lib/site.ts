@@ -2,7 +2,7 @@ import "server-only";
 
 export const site = {
   title: "CXS Portfolio",
-  description: "A software portfolio and devlog about building for the web.",
+  description: "Explore Carlos Sosa’s software projects, demos, and devlog through an interactive CRT television.",
   name: process.env.PORTFOLIO_NAME?.trim(),
   bio: process.env.PORTFOLIO_BIO?.trim(),
   skills: [...new Set((process.env.PORTFOLIO_SKILLS ?? "").split(",").map((skill) => skill.trim()).filter(Boolean))],
@@ -13,13 +13,21 @@ export const site = {
   contact: process.env.PORTFOLIO_CONTACT_URL?.trim(),
 };
 
-export const siteUrl = new URL(process.env.SITE_URL || "http://localhost:3000");
+const deploymentHost = process.env.VERCEL_ENV === "production"
+  ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+  : process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL;
+export const siteUrl = new URL(process.env.SITE_URL || (deploymentHost ? `https://${deploymentHost}` : "http://localhost:3000"));
+export const portfolioShareImage = {
+  url: "/opengraph-image?v=crt-portfolio", type: "image/png", width: 1200, height: 630,
+  alt: "Carlos Sosa’s portfolio, with the CXS logo on its opening CRT television",
+};
 export const indexable = Boolean(process.env.SITE_URL && process.env.VERCEL_ENV !== "preview");
 
 export type Project = {
   title: string;
   description: string;
   href: string;
+  demo?: { id: string; src: string; poster: string; description: string };
   gallery?: readonly { src: string; alt: string; caption: string; width: number; height: number }[];
   screenshot?: { src: string; alt: string; aspectRatio?: number };
 };
@@ -37,6 +45,12 @@ export const projects: readonly Project[] = [{
   title: "Rally Scoring",
   description: "A scoring system for the Rally Educativo Ecológico Domingo Savio. Judges score teams at each station, and spectators can follow their progress in the public standings.",
   href: "https://rally-scoring.vercel.app/",
+  demo: {
+    id: "rally-scoring-demo",
+    src: "/videos/projects/rally-scoring/rally-scoring-demo.mp4",
+    poster: "/images/projects/rally-scoring/demo-poster.webp",
+    description: "A 25-second walkthrough of the scoring dashboard, teams, stations, questions, and standings.",
+  },
   screenshot: rallyDashboard,
   gallery: [
     rallyDashboard,

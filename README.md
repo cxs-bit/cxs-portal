@@ -29,6 +29,46 @@ pending verification of Thunder’s license.
 Once the official license allows the intended web embedding and distribution,
 self-host the licensed WOFF2 and set `--font-thunder` to its family name.
 
+## TV channels
+
+Share `/portfolio` for projects, `/work` for the professional profile, and
+`/personal` for the portrait and music. The shop at `/` offers channels that
+have content. The arrows tune the preview. Scroll or use the entry button
+to open the selected destination.
+
+The presence of an approved `content/channels/work.json` or
+`content/channels/personal.json` publishes that channel. Each file takes the
+following shape. Replace the example values with owner-approved material.
+
+```json
+{
+  "introduction": "Professional introduction",
+  "cv": { "href": "/files/cv.pdf", "label": "Read my CV (PDF)" },
+  "approach": ["A working principle"],
+  "education": [{ "qualification": "Qualification", "school": "Institution", "period": "Dates" }]
+}
+```
+
+```json
+{
+  "portrait": { "href": "/images/portrait.webp", "alt": "Photo description", "caption": "Photo caption" },
+  "playlist": "https://music.youtube.com/playlist?list=YOUR_PLAYLIST_ID",
+  "fact": "A fact about this portfolio."
+}
+```
+
+Omit unfinished fields to use the section placeholders. The portrait card appears
+when a photo, caption, and alt text are supplied. Use the shared URL of a
+public or unlisted YouTube Music playlist. The player follows the playlist order
+and provides a direct link for tracks that restrict embedded playback.
+
+Stage drafts in the Git-ignored `content/channels/private/` directory using
+the same filenames. Sign in at `/preview` with the owner account and open the
+shop. Store draft files under `private/work/` or `private/personal/` and link
+to `/preview/channel-assets/work/<file>` or its Personal equivalent.
+After approval, move the assets to public paths, update their links, and
+publish the JSON. URLs may also point to approved HTTPS assets.
+
 ## Write and publish
 
 Add a kebab-case `.mdx` file under `content/blog/`, using the filename as the slug.

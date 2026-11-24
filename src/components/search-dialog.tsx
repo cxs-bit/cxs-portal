@@ -67,7 +67,7 @@ export default function SearchDialog({ onClose }: { onClose: (restoreFocus: bool
             <div className="search-input-row">
               <HugeiconsIcon icon={Search01Icon} size={20} aria-hidden="true" />
               <TextField aria-label="Search portfolio" className="search-field">
-                <Input ref={inputRef} autoFocus autoComplete="off" maxLength={100} placeholder="Search projects, posts, and pages…" />
+                <Input ref={inputRef} autoFocus autoComplete="off" maxLength={100} placeholder="Search the portfolio…" />
               </TextField>
               <Button variant="ghost" size="icon" onClick={() => onClose(true)} aria-label="Close search">
                 <HugeiconsIcon icon={Cancel01Icon} aria-hidden="true" />

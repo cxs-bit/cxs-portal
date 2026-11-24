@@ -1,10 +1,8 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowDown01Icon, ArrowRight01Icon, GithubIcon, InstagramIcon, Linkedin01Icon, Link01Icon, Mail01Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { CrtIntro } from "@/components/crt-intro";
 import { FeaturedProject } from "@/components/featured-project";
 import { HeroMotion } from "@/components/hero-motion";
 import { HomeFeature } from "@/components/home-feature";
@@ -14,14 +12,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { getPublishedPost } from "@/lib/posts";
 import { projects, site } from "@/lib/site";
 
-export const metadata: Metadata = {
-  alternates: { canonical: "/" },
-  openGraph: { url: "/", title: site.title, description: site.description, siteName: site.title },
-};
-
 const heroTitle = ["Building for the web", "Showing the work"];
 
-export default async function HomePage() {
+export async function PortfolioContent() {
   const initialProject = projects[0];
   const foundation = initialProject ? undefined : (await getPublishedPost("starting-point"))?.summary;
   const bio = site.bio || "I’m building CXS Portfolio to document web projects as they take shape. I write about what changed, which decisions mattered, and what still needs work.";
@@ -37,7 +30,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <CrtIntro />
       <HeroMotion>
         <div className="site-wrap hero-copy">
           <h1 id="hero-title" data-hero-enter>
@@ -103,16 +95,20 @@ export default async function HomePage() {
                 <HugeiconsIcon icon={Mail01Icon} aria-hidden="true" />Email me
               </a>
             )}
-            {contactLinks.map(({ label, href, icon }) => (
-              <a key={label} href={href} className="text-link social-label">
-                <HugeiconsIcon icon={icon} size={20} aria-hidden="true" />{label}
-              </a>
-            ))}
-            {!site.linkedin && (
-              <span className="contact-placeholder social-label">
-                <HugeiconsIcon icon={Linkedin01Icon} size={20} aria-hidden="true" />LinkedIn · Coming soon
-              </span>
-            )}
+            <ul className="contact-links" role="list">
+              {contactLinks.map(({ label, href, icon }) => (
+                <li key={label}>
+                  <a href={href} className="text-link social-label">
+                    <HugeiconsIcon icon={icon} size={20} aria-hidden="true" />{label}
+                  </a>
+                </li>
+              ))}
+              {!site.linkedin && (
+                <li className="contact-placeholder social-label">
+                  <HugeiconsIcon icon={Linkedin01Icon} size={20} aria-hidden="true" />LinkedIn · Coming soon
+                </li>
+              )}
+            </ul>
           </div>
         </div>
       </section>
