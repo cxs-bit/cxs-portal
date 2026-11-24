@@ -13,7 +13,10 @@ export const site = {
   contact: process.env.PORTFOLIO_CONTACT_URL?.trim(),
 };
 
-export const siteUrl = new URL(process.env.SITE_URL || "http://localhost:3000");
+const deploymentHost = process.env.VERCEL_ENV === "production"
+  ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+  : process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL;
+export const siteUrl = new URL(process.env.SITE_URL || (deploymentHost ? `https://${deploymentHost}` : "http://localhost:3000"));
 export const portfolioShareImage = {
   url: "/opengraph-image?v=crt-portfolio", type: "image/png", width: 1200, height: 630,
   alt: "Carlos Sosa’s portfolio, with the CXS logo on its opening CRT television",
