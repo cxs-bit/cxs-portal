@@ -1,9 +1,38 @@
 import { expect, test } from "@playwright/test";
 
+test("opens deep links and repeat visits without fetching the TV model", async ({ page }) => {
+  let models = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === "/models/crt-tv.glb") models++;
+  });
+  await page.goto("/#contact");
+  await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
+  await expect(page.locator("#contact")).toBeInViewport();
+  await page.goto("/portfolio#contact");
+  await expect(page.locator("#contact")).toBeInViewport();
+  await page.evaluate(() => sessionStorage.setItem("cxs-crt-intro-seen", "1"));
+  await page.goto("/");
+  await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
+  await expect(page.getByRole("link", { name: "Change channel" })).toBeInViewport();
+  expect(models).toBe(0);
+});
+
+test("returns keyboard access to the page if the TV loses its graphics context", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "Uses Chromium's software WebGL renderer.");
+  await page.goto("/?tune=portfolio");
+  await expect(page.getByRole("dialog", { name: "TV channel selector" })).toBeVisible({ timeout: 20000 });
+  await page.locator(".crt-intro-stage canvas").evaluate(canvas => canvas.dispatchEvent(new Event("webglcontextlost")));
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("#portfolio-page")).toHaveJSProperty("inert", false);
+  await expect(page.locator("#main")).toBeFocused();
+  await expect(page.getByRole("navigation", { name: "TV channels" })).toBeInViewport();
+});
+
 test("allows keyboard entry and remembers it for the session", async ({ page, browserName }) => {
+  test.slow(); // Includes two complete typing cycles after the animated handoff.
   test.skip(browserName !== "chromium", "This test uses Chromium's software WebGL renderer.");
   await page.goto("/");
-  const enter = page.getByRole("button", { name: "Enter portfolio" });
+  const enter = page.getByRole("button", { name: "Enter Portfolio" });
   await expect(enter).toBeVisible({ timeout: 20000 });
   await expect(enter).toBeFocused();
   await expect(page.locator(".site-dock")).toBeHidden();
@@ -51,6 +80,15 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   await expect(enter).toHaveCount(0);
   await expect(page.locator("#main")).toBeFocused();
   await expect(page.locator(".site-dock")).toBeVisible();
+  await page.getByRole("link", { name: "Explore the work" }).click();
+  const featureTop = () => page.locator("#featured-work").evaluate(section => section.getBoundingClientRect().top);
+  await expect.poll(featureTop).toBeLessThan(100);
+  const previousTop = await featureTop();
+  await page.evaluate(() => { location.hash = "contact"; });
+  await expect(page.locator("#contact")).toBeInViewport();
+  await page.goBack({ waitUntil: "commit" });
+  await expect(page).toHaveURL(/\/portfolio#featured-work$/);
+  await expect.poll(async () => Math.abs(await featureTop() - previousTop)).toBeLessThan(2);
   await page.reload();
   await expect(enter).toHaveCount(0);
 });
@@ -58,7 +96,7 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
 test("scrolls into the page, back into the TV, and into the page again", async ({ page, browserName, isMobile }) => {
   test.skip(browserName !== "chromium", "This test uses Chromium's software WebGL renderer.");
   await page.goto("/");
-  const intro = page.getByRole("dialog", { name: "Enter the portfolio" });
+  const intro = page.getByRole("dialog", { name: "TV channel selector" });
   await expect(intro).toBeVisible({ timeout: 20000 });
   const noise = page.locator(".crt-intro-noise");
   await expect(noise).toHaveCSS("mix-blend-mode", "overlay");
@@ -121,7 +159,7 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   await expect(portfolio).toHaveCSS("opacity", "0");
   await expect(logo).toHaveCSS("opacity", "1");
   await expect(intro.getByRole("button", { name: "Skip intro" })).toHaveCount(0);
-  if (isMobile) await intro.getByRole("button", { name: "Enter portfolio" }).tap();
+  if (isMobile) await intro.getByRole("button", { name: "Enter Portfolio" }).tap();
   else await page.keyboard.press("Escape");
   await expect(intro).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Explore the work" })).toBeVisible();
@@ -140,5 +178,5 @@ test("keeps a slow-loading model above the page the visitor is reading", async (
   await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeInViewport();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  await expect(page.getByRole("dialog", { name: "Enter the portfolio" })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("dialog", { name: "TV channel selector" })).toBeVisible({ timeout: 15000 });
 });

@@ -121,6 +121,13 @@ test("keeps the dark palette and preserves readable reduced-motion layouts", asy
 });
 
 test("serves public metadata and keeps preview routes private in production", async ({ page, request }) => {
+  await page.goto("/");
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", /\/opengraph-image/);
+  await page.goto("/projects");
+  const projectImage = page.locator('meta[property="og:image"]');
+  await expect(projectImage).toHaveAttribute("content", /\/projects\/opengraph-image/);
+  await expect(page.locator('meta[name="twitter:image"]')).toHaveAttribute("content", (await projectImage.getAttribute("content"))!);
+  await expect(page.locator('meta[property="og:video"]')).toHaveAttribute("content", /^https?:\/\/.+\/rally-scoring-demo\.mp4$/);
   await page.goto("/blog/starting-point");
   await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", "A starting point");
   const postImage = page.locator('meta[property="og:image"]');
