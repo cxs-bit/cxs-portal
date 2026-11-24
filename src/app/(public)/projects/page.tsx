@@ -5,15 +5,21 @@ import { Folder01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { buttonVariants } from "@/components/ui/button";
 import { listPublishedPosts } from "@/lib/posts";
-import { projects } from "@/lib/site";
+import { projects, site, siteUrl } from "@/lib/site";
 
 const description = "Software projects and notes on how they’re built.";
+const featured = projects.find(project => project.demo);
 
 export const metadata: Metadata = {
   title: "Projects",
   description,
   alternates: { canonical: "/projects" },
-  openGraph: { title: "Projects", description, url: "/projects" },
+  openGraph: {
+    type: "website", siteName: site.title, url: "/projects",
+    title: featured ? `${featured.title} demo · CXS Projects` : "Projects",
+    description: featured?.demo?.description ?? description,
+    videos: featured?.demo && [{ url: new URL(featured.demo.src, siteUrl), type: "video/mp4", width: 1920, height: 1080 }],
+  },
 };
 
 export default async function ProjectsPage() {
@@ -33,6 +39,25 @@ export default async function ProjectsPage() {
                 <div><h2>{project.title}</h2><p>{project.description}</p></div>
                 <a className="text-link" href={project.href}>Visit {project.title}</a>
               </div>
+              {project.demo && (
+                <figure className="project-demo">
+                  <video
+                    id={project.demo.id}
+                    aria-label={project.title + " demo"}
+                    aria-describedby={project.demo.id + "-caption"}
+                    controls
+                    playsInline
+                    preload="none"
+                    poster={project.demo.poster}
+                    src={project.demo.src}
+                    width={1920}
+                    height={1080}
+                  >
+                    <a href={project.demo.src}>Open the {project.title} video</a>
+                  </video>
+                  <figcaption id={project.demo.id + "-caption"}>{project.demo.description}</figcaption>
+                </figure>
+              )}
               {project.gallery && (
                 <div className="project-gallery">
                   {project.gallery.map(({ src, alt, caption, width, height }, index) => (

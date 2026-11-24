@@ -76,8 +76,12 @@ test("keeps a focused logo still and shows a wrapping list with reduced motion",
   await loop.scrollIntoViewIfNeeded();
   const initial = await position();
   await expect.poll(position).not.toBe(initial);
-  const logo = loop.getByRole("link").first();
-  await logo.focus();
+  // Keyboard focus can center a logo, changing which link is first visible.
+  const focusedName = await loop.getByRole("link").first().evaluate(link => {
+    (link as HTMLAnchorElement).focus();
+    return link.getAttribute("aria-label")!;
+  });
+  const logo = loop.getByRole("link", { name: focusedName, exact: true });
   await expect(logo).toBeFocused();
   await expect.poll(() => track.evaluate(async (element) => {
     const before = element.style.transform;

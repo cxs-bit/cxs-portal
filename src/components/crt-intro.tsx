@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type Lenis from "lenis";
+import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { channels, type ChannelId } from "@/lib/channel-catalog";
+import { ChannelLinks } from "./channel-links";
+import { VisitClock } from "./visit-clock";
+import { createWallTitle } from "./tv-wall-title";
 import Noise from "@/components/backgrounds/Noise";
 
 const sessionKey = "cxs-crt-intro-seen";
@@ -15,9 +22,31 @@ function subscribe(update: () => void) {
   return () => media.removeEventListener("change", update);
 }
 
-export function CrtIntro() {
-  const enabled = useSyncExternalStore(subscribe, () => window.matchMedia(motionQuery).matches, () => false);
+export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const available = channels.filter(item => panels[item.id]);
+  const direct = available.find(item => item.href === pathname);
+  const [enteredFromShop, setEnteredFromShop] = useState(false);
+  const shopSession = pathname === "/" || (enteredFromShop && Boolean(direct));
+  const [tuned, setTuned] = useState<ChannelId>("portfolio");
+  const selected = available.find(item => item.id === tuned) ?? available[0];
+  const position = available.indexOf(selected) + 1;
+  const displayed = shopSession ? selected : direct;
+  const wallRef = useRef<((label: string) => void) | null>(null);
+
+  const motionAllowed = useSyncExternalStore(subscribe, () => window.matchMedia(motionQuery).matches, () => false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [skipScene] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const tune = new URLSearchParams(location.search).get("tune");
+    if (available.some(channel => channel.id === tune) && !location.hash) return false;
+    if (location.hash) return true;
+    try { return sessionStorage.getItem(sessionKey) === "1"; } catch { return false; }
+  });
+  const enabled = shopSession && motionAllowed && !skipScene && !unavailable;
   const [inIntro, setInIntro] = useState(false);
+  const smoothScrolling = enabled && (pathname === "/" || inIntro);
   const [poweredOn, setPoweredOn] = useState(true);
   const stageRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
@@ -27,8 +56,38 @@ export function CrtIntro() {
   const syncIntroRef = useRef<((force?: boolean) => void) | null>(null);
   const settleRef = useRef<((duration: number) => void) | null>(null);
 
+  const initialTune = useEffectEvent(() => {
+    const id = new URLSearchParams(location.search).get("tune");
+    const item = available.find(channel => channel.id === id);
+    if (item) setTuned(item.id);
+    return Boolean(item);
+  });
+  const commitEntry = useEffectEvent(() => {
+    if (location.pathname !== "/") return;
+    // Save the return tuning on the shop entry, then add exactly one destination.
+    setEnteredFromShop(true);
+    history.replaceState(null, "", "/?tune=" + selected.id);
+    router.push(selected.href, { scroll: false });
+  });
+  const reopen = useEffectEvent(() => {
+    if (location.pathname !== "/") history.back();
+  });
+  const initialLabel = useEffectEvent(() => selected.name);
+  const restoreRoute = useEffectEvent(() => {
+    const item = available.find(channel => channel.href === location.pathname);
+    if (item) setTuned(item.id);
+    else initialTune();
+  });
+  function tune(direction: number) {
+    if (!poweredOn || available.length < 2) return;
+    setTuned(id => {
+      const index = available.findIndex(item => item.id === id);
+      return available[(index + direction + available.length) % available.length].id;
+    });
+  }
+
   useEffect(() => {
-    if (!enabled) return;
+    if (!smoothScrolling) return;
     let cancelled = false;
 
     void import("lenis").then(({ default: SmoothScroll }) => {
@@ -49,18 +108,25 @@ export function CrtIntro() {
       lenisRef.current?.destroy();
       lenisRef.current = null;
     };
-  }, [enabled]);
+  }, [smoothScrolling]);
 
   useEffect(() => {
-    if (!enabled || !stageRef.current || !logoRef.current) return;
+    const page = document.getElementById("portfolio-page")!;
+    if (!enabled) {
+      page.dataset.crtIntro = skipScene && !unavailable ? "ready" : "static";
+      return () => { delete page.dataset.crtIntro; };
+    }
+    if (!stageRef.current || !logoRef.current) return;
     const stage = stageRef.current;
     const logo = logoRef.current;
     const sceneElement = stage.parentElement!;
-    const page = document.getElementById("portfolio-page")!;
     page.dataset.crtIntro = "loading";
     const request = new AbortController();
     let cancelled = false;
     let dispose = () => {};
+    // A mobile browser may reclaim the GPU while the page is in the background.
+    const onContextLoss = () => { if (!cancelled) setUnavailable(true); };
+    stage.addEventListener("webglcontextlost", onContextLoss, true);
 
     async function setup() {
       const modelUrl = new URL("/models/crt-tv.glb", window.location.href);
@@ -201,6 +267,13 @@ export function CrtIntro() {
       shaft.position.y = floor.position.y + cabinetHeight * 1.25;
       shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
       scene.add(shaft);
+      const wallTitle = createWallTitle(THREE);
+      scene.add(wallTitle.mesh);
+      wallRef.current = wallTitle.write;
+      wallTitle.write(initialLabel());
+      void document.fonts.ready.then(() => {
+        if (!cancelled) wallTitle.write(initialLabel());
+      });
       // Trace a reflected viewing ray to the tube and soften its footprint on the floor.
       const reflection = new THREE.Mesh(
         new THREE.PlaneGeometry(cabinetHeight * 10, cabinetHeight * 10),
@@ -281,6 +354,8 @@ export function CrtIntro() {
         camera.position.lerpVectors(start, end, cameraProgress);
         camera.lookAt(target.copy(startLook).lerp(screenCenter, cameraProgress));
         camera.updateMatrixWorld();
+        const wallDepth = -target.copy(center).applyMatrix4(camera.matrixWorldInverse).z + cabinetHeight;
+        wallTitle.align(camera, wallDepth);
         aperture.makeEmpty();
         for (const vertex of glass) {
           target.copy(vertex).project(camera);
@@ -305,7 +380,8 @@ export function CrtIntro() {
         const power = powerRef.current;
         if (power) {
           const available = progress < 0.32;
-          if (!available && document.activeElement === power) enterRef.current?.focus({ preventScroll: true });
+          sceneElement.dataset.tuning = String(available);
+          if (!available && (document.activeElement === power || document.activeElement?.classList.contains("tv-arrow"))) enterRef.current?.focus({ preventScroll: true });
           power.disabled = !available;
         }
         const scale = screenWidth / width;
@@ -340,7 +416,7 @@ export function CrtIntro() {
         wallLightsTimer = undefined;
       }
       function syncWallLights() {
-        if (document.hidden || window.scrollY > 1) {
+        if (document.hidden || !showing || sceneElement.dataset.powered === "false" || window.scrollY > 1) {
           stopWallLights();
         } else if (wallLightsTimer === undefined) {
           // Drift slowly at rest and let scroll-driven frames take over during entry.
@@ -408,6 +484,8 @@ export function CrtIntro() {
         }
       }
 
+      let restoring = false;
+      let scrollingBack = false;
       function scroll(force = false) {
         const scrollY = window.scrollY;
         if (!force && scrollY === lastScrollY) return;
@@ -441,9 +519,15 @@ export function CrtIntro() {
           page.inert = active;
           page.dataset.crtIntro = active ? "active" : wasShowing ? "entered" : "ready";
           setInIntro(active);
+          if (backingOut && !restoring && location.pathname !== "/") {
+            scrollingBack = true;
+            reopen();
+          }
           if (!active) {
+            settling = false;
             clearPreview();
             if (wasShowing) {
+              if (!restoring) commitEntry();
               try { sessionStorage.setItem(sessionKey, "1"); } catch { /* Storage is optional. */ }
               document.getElementById("main")?.focus({ preventScroll: true });
             }
@@ -474,17 +558,18 @@ export function CrtIntro() {
       // Keep that page in place and let them scroll up to see the television.
       const download = performance.getEntriesByName(modelUrl.href, "resource").at(-1);
       const lateModel = (download?.duration ?? 0) > 1800;
-      let startOnPage = lateModel || Boolean(
+      const explicitTune = initialTune();
+      let startOnPage = Boolean(
         window.scrollY || window.location.hash || page.contains(document.activeElement) ||
           page.querySelector('.dock-search[aria-expanded="true"]'),
       );
-      try { startOnPage ||= Boolean(sessionStorage.getItem(sessionKey)); } catch { /* Storage is optional. */ }
+      if (!explicitTune) startOnPage ||= lateModel;
       const initialScroll = window.scrollY;
       resize();
       if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
-      if (lateModel) page.dataset.crtIntro = "static";
+      if (lateModel && startOnPage) page.dataset.crtIntro = "static";
       syncIntroRef.current = scroll;
       settleRef.current = settle;
       const onResize = () => {
@@ -495,11 +580,39 @@ export function CrtIntro() {
         if (settling) settle(0);
         scroll(true);
       };
+      // The entry is recorded at the end of the camera travel. Native history
+      // restoration would otherwise replay that scroll after Back opens the shop.
+      const previousRestoration = history.scrollRestoration;
+      history.scrollRestoration = "manual";
+      const onHistory = () => {
+        if (!["/", ...channels.map(item => item.href)].includes(location.pathname)) return;
+        if (scrollingBack && location.pathname === "/") {
+          scrollingBack = false;
+          return;
+        }
+        restoreRoute();
+        restoring = true;
+        const section = location.hash && document.getElementById(location.hash.slice(1));
+        if (section) {
+          section.scrollIntoView({ behavior: "instant" });
+        } else {
+          const top = location.pathname === "/" ? 0 : entry;
+          lenisRef.current?.scrollTo(top, { immediate: true, force: true });
+          window.scrollTo({ top, behavior: "instant" });
+        }
+        scroll(true);
+        restoring = false;
+      };
+      window.addEventListener("popstate", onHistory);
       window.addEventListener("resize", onResize);
       window.addEventListener("scroll", onNativeScroll, { passive: true });
       document.addEventListener("visibilitychange", syncWallLights);
       dispose = () => {
+        history.scrollRestoration = previousRestoration;
+        window.removeEventListener("popstate", onHistory);
         window.removeEventListener("resize", onResize);
+        wallTitle.dispose();
+        wallRef.current = null;
         window.removeEventListener("scroll", onNativeScroll);
         document.removeEventListener("visibilitychange", syncWallLights);
         stopWallLights();
@@ -531,43 +644,55 @@ export function CrtIntro() {
     }
     void setup().catch(() => {
       if (cancelled) return;
-      dispose();
-      page.dataset.crtIntro = "static";
+      setUnavailable(true);
     });
     return () => {
       cancelled = true;
       request.abort();
+      stage.removeEventListener("webglcontextlost", onContextLoss, true);
+      const restoreFocus = page.inert;
       dispose();
+      if (restoreFocus) document.getElementById("main")?.focus({ preventScroll: true });
       delete page.dataset.crtIntro;
     };
-  }, [enabled]);
+  }, [enabled, skipScene, unavailable]);
 
   useEffect(() => {
     if (enabled && inIntro) enterRef.current?.focus({ preventScroll: true });
   }, [enabled, inIntro]);
 
   useEffect(() => {
-    syncIntroRef.current?.(true);
-  }, [poweredOn]);
+    wallRef.current?.(selected.name);
+  }, [selected.name]);
 
-  if (!enabled) return null;
-  return createPortal(
+  useEffect(() => {
+    syncIntroRef.current?.(true);
+  }, [poweredOn, selected.name]);
+
+  if (!displayed || (pathname !== "/" && !direct)) return null;
+  return <>
+    <ChannelLinks active={displayed} available={available} inShop={pathname === "/" && !skipScene} />
+    {panels[displayed.id]}
+    {enabled && createPortal(
     <div
       className="crt-intro"
       role="dialog"
       aria-modal={inIntro || undefined}
-      aria-label="Enter the portfolio"
+      aria-label="TV channel selector"
       aria-hidden={!inIntro}
       style={{ visibility: inIntro ? "visible" : "hidden" }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") {
+        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          event.preventDefault();
+          if (event.currentTarget.querySelector('[data-tuning="true"]')) tune(event.key === "ArrowRight" ? 1 : -1);
+        } else if (event.key === "Escape") {
           event.preventDefault();
           settleRef.current?.(0);
         } else if (event.key === "Tab") {
           event.preventDefault();
           event.currentTarget.dataset.keyboardCue = "";
-          const controls = [powerRef.current, enterRef.current]
-            .filter((control): control is HTMLButtonElement => Boolean(control && !control.disabled));
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"))
+            .filter(control => control.getClientRects().length && getComputedStyle(control).visibility === "visible");
           const current = controls.findIndex((control) => control === document.activeElement);
           const offset = event.shiftKey ? -1 : 1;
           controls[(current + offset + controls.length) % controls.length]?.focus({ preventScroll: true });
@@ -577,8 +702,8 @@ export function CrtIntro() {
       onPointerDown={(event) => { delete event.currentTarget.dataset.keyboardCue; }}
     >
         <div className="crt-intro-scene" data-powered={poweredOn}>
-          <div className="wordmark crt-intro-logo" ref={logoRef} aria-hidden="true">
-            <span className="brand-mark" />CXS<span className="wordmark-period">.</span>
+          <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
+            <span key={selected.id}>{selected.name}</span>
           </div>
           <div className="crt-glass-shutter" aria-hidden="true" />
           <div className="crt-intro-stage" ref={stageRef} aria-hidden="true" />
@@ -596,6 +721,23 @@ export function CrtIntro() {
               flicker={0.25}
             />
           )}
+          <div className="tv-readouts">
+            <span className="tv-status" data-on={poweredOn}>TV {poweredOn ? "ON" : "OFF"}</span>
+            <span className="tv-channel-count">
+              <span className="sr-only">Channel {position} of {available.length}</span>
+              <span aria-hidden="true">CH {String(position).padStart(2, "0")} / {String(available.length).padStart(2, "0")}</span>
+            </span>
+            {inIntro && <VisitClock />}
+            <span className="tv-owner">Carlos Sosa</span>
+          </div>
+          <span className="sr-only" role="status">{inIntro ? selected.name : ""}</span>
+          {available.length > 1 && ([-1, 1] as const).map(direction =>
+            <button type="button" key={direction} className={direction < 0 ? "tv-arrow tv-prev" : "tv-arrow tv-next"}
+              aria-label={direction < 0 ? "Previous channel" : "Next channel"}
+              disabled={!poweredOn} onClick={() => tune(direction)}>
+              <HugeiconsIcon icon={direction < 0 ? ArrowLeft01Icon : ArrowRight01Icon} size={26} aria-hidden="true" />
+            </button>
+          )}
           <div className="crt-power-area">
             <button
               ref={powerRef}
@@ -611,9 +753,9 @@ export function CrtIntro() {
           </div>
           <div className="crt-intro-controls">
             <p>Scroll to enter</p>
-            <button ref={enterRef} type="button" onClick={() => settleRef.current?.(0.86)}>Enter portfolio</button>
+            <button ref={enterRef} type="button" onClick={() => settleRef.current?.(0.86)}>Enter {selected.name}</button>
           </div>
         </div>
     </div>, document.body,
-  );
+  )}</>;
 }
