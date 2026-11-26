@@ -26,36 +26,36 @@ export function SiteBackground() {
     <div className="site-crt" aria-hidden="true">
       {motionAllowed && !reading && (
         <CRTWarp
-          color="#3dff7a"
-          backgroundColor="#091c1b"
+          color="#191919"
+          backgroundColor="#000000"
           mask="none"
-          curvature={0.3}
-          persistence={0.9}
+          curvature={0.35}
+          persistence={0.8}
           lightMode={false}
-          speed={0.4}
+          speed={0.35}
           variation={0}
-          waveAmplitude={0.45}
-          waveFrequency={5.1}
-          levels={3}
+          waveAmplitude={0.2}
+          waveFrequency={3.2}
+          levels={4}
           columns={112}
           corners={0}
-          scanlineStrength={0.7}
-          scanlineFrequency={220}
-          bloom={2.2}
-          bloomRadius={1.4}
+          scanlineStrength={1}
+          scanlineFrequency={260}
+          maskStrength={0.3}
+          bloom={0.7}
+          bloomRadius={1}
           rgbShift={0}
-          noise={0}
+          noise={0.3}
           flicker={0.1}
-          interference={0.15}
-          vignette={0.4}
+          interference={1}
+          vignette={1}
           brightness={1}
-          intro={false}
+          intro
           mouseReact
           mouseStrength={0.1}
           changeOnClick={false}
-          dpr={2}
+          dpr={1.5}
           paused={false}
-          fps={20}
         />
       )}
     </div>

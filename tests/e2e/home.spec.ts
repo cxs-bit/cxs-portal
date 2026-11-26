@@ -3,6 +3,22 @@ import { expect, test } from "@playwright/test";
 test.describe("server-rendered homepage", () => {
   test.use({ javaScriptEnabled: false });
 
+  test("opens the top navigation and follows a direct link without JavaScript", async ({ page }) => {
+    await page.goto("/portfolio");
+    const navigation = page.getByRole("navigation", { name: "Main navigation" });
+    const menu = navigation.locator("summary").filter({ hasText: "Menu" });
+    const projects = navigation.getByRole("link", { name: "Projects" });
+    await expect(projects).toBeHidden();
+    await menu.focus();
+    await page.keyboard.press("Enter");
+    await expect(projects).toBeVisible();
+    await expect(navigation.getByRole("link", { name: "Change channel" })).toHaveAttribute("href", "/?tune=portfolio#channels");
+    await projects.click();
+    await expect(page).toHaveURL("/projects");
+    await menu.click();
+    await expect(projects).toHaveAttribute("aria-current", "page");
+  });
+
   test("shows the featured project and its link before JavaScript runs", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeVisible();
@@ -47,9 +63,9 @@ test("jumps from the hero to the featured project by keyboard at 320px", async (
   await page.keyboard.press("Tab");
   await expect(projectLink).toBeFocused();
   await expect.poll(async () => {
-    const dock = (await page.locator(".site-dock").boundingBox())!;
+    const header = (await page.locator(".site-card-nav").boundingBox())!;
     const action = (await projectLink.boundingBox())!;
-    return action.y + action.height < dock.y;
+    return action.y >= header.y + header.height && action.y + action.height <= 720;
   }).toBe(true);
   await expect(projectLink).toHaveAttribute("href", "https://rally-scoring.vercel.app/");
 });

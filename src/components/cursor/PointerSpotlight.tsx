@@ -40,9 +40,15 @@ export function PointerSpotlight() {
       frame = 0;
       if (!halo || !pointer) return;
       const { x, y } = pointer;
+      if (document.elementFromPoint(x, y)?.closest(".hero")) {
+        halo.hidden = true;
+        lit.forEach(clearButton);
+        lit.clear();
+        return;
+      }
       const nearby = [];
       for (const button of document.querySelectorAll<HTMLElement>(buttonSelector)) {
-        if (button.closest("[inert], [aria-hidden=true]")) continue;
+        if (button.closest(".hero, [inert], [aria-hidden=true]")) continue;
         const bounds = button.getBoundingClientRect();
         if (!bounds.width || !bounds.height) continue;
         const dx = Math.max(bounds.left - x, 0, x - bounds.right);

@@ -9,15 +9,15 @@ export async function socialCard(title: string, section: string, art?: "televisi
   return new ImageResponse(
     <div style={{
       width: "100%", height: "100%", display: "flex", flexDirection: "column",
-      justifyContent: "space-between", padding: "55px 60px 64px", color: "#ecfaf3",
-      background: "#091b19", borderTop: "12px solid #62df97",
+      justifyContent: "space-between", padding: "55px 60px 64px", color: "#eff1f5",
+      background: "#17191d", borderTop: "12px solid #60b1ea",
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14, fontSize: 34, fontWeight: 700 }}>
-        <span style={{ color: "#62df97" }}>{"//"}</span> CXS.
+        <span style={{ color: "#60b1ea" }}>{"//"}</span> CXS.
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 24, flexGrow: 1 }}>
         <div style={{ display: "flex", flexDirection: "column", width: image ? 430 : "100%", gap: 18 }}>
-          <div style={{ fontSize: 32, color: "#91e9b6" }}>{section}</div>
+          <div style={{ fontSize: 32, color: "#60b1ea" }}>{section}</div>
           <div style={{ fontSize: title.length > 45 ? 64 : 88, lineHeight: 1.04, letterSpacing: -3, fontWeight: 700 }}>
             {title}
           </div>
