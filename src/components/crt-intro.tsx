@@ -7,14 +7,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { channels, type ChannelId } from "@/lib/channel-catalog";
-import { ChannelLinks } from "./channel-links";
+import { ChannelArrival } from "./channel-arrival";
 import { VisitClock } from "./visit-clock";
 import { createWallTitle } from "./tv-wall-title";
-import Noise from "@/components/backgrounds/Noise";
 
 const sessionKey = "cxs-crt-intro-seen";
 
 const motionQuery = "(prefers-reduced-motion: no-preference)";
+
+type Tuning = { id: ChannelId; roll?: { from: string; direction: "next" | "previous" } };
 
 function subscribe(update: () => void) {
   const media = window.matchMedia(motionQuery);
@@ -29,8 +30,8 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const direct = available.find(item => item.href === pathname);
   const [enteredFromShop, setEnteredFromShop] = useState(false);
   const shopSession = pathname === "/" || (enteredFromShop && Boolean(direct));
-  const [tuned, setTuned] = useState<ChannelId>("portfolio");
-  const selected = available.find(item => item.id === tuned) ?? available[0];
+  const [tuned, setTuned] = useState<Tuning>({ id: "portfolio" });
+  const selected = available.find(item => item.id === tuned.id) ?? available[0];
   const position = available.indexOf(selected) + 1;
   const displayed = shopSession ? selected : direct;
   const wallRef = useRef<((label: string) => void) | null>(null);
@@ -59,7 +60,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const initialTune = useEffectEvent(() => {
     const id = new URLSearchParams(location.search).get("tune");
     const item = available.find(channel => channel.id === id);
-    if (item) setTuned(item.id);
+    if (item) setTuned({ id: item.id });
     return Boolean(item);
   });
   const commitEntry = useEffectEvent(() => {
@@ -75,14 +76,17 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const initialLabel = useEffectEvent(() => selected.name);
   const restoreRoute = useEffectEvent(() => {
     const item = available.find(channel => channel.href === location.pathname);
-    if (item) setTuned(item.id);
+    if (item) setTuned({ id: item.id });
     else initialTune();
   });
   function tune(direction: number) {
     if (!poweredOn || available.length < 2) return;
-    setTuned(id => {
-      const index = available.findIndex(item => item.id === id);
-      return available[(index + direction + available.length) % available.length].id;
+    setTuned(current => {
+      const index = Math.max(0, available.findIndex(item => item.id === current.id));
+      const id = available[(index + direction + available.length) % available.length].id;
+      // A second press during a roll lands on the latest choice immediately.
+      if (current.roll) return { id };
+      return { id, roll: { from: available[index].name, direction: direction > 0 ? "next" : "previous" } };
     });
   }
 
@@ -97,7 +101,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         anchors: true,
         smoothWheel: window.matchMedia("(pointer: fine)").matches,
         lerp: 0.085,
-        prevent: (node) => Boolean(node.closest(".search-overlay, select, textarea")),
+        prevent: (node) => Boolean(node.closest(".search-overlay, .site-card-nav, select, textarea")),
       });
       lenis.on("scroll", () => syncIntroRef.current?.());
       lenisRef.current = lenis;
@@ -272,7 +276,9 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       wallRef.current = wallTitle.write;
       wallTitle.write(initialLabel());
       void document.fonts.ready.then(() => {
-        if (!cancelled) wallTitle.write(initialLabel());
+        if (cancelled) return;
+        wallTitle.write(initialLabel());
+        syncIntroRef.current?.(true);
       });
       // Trace a reflected viewing ray to the tube and soften its footprint on the floor.
       const reflection = new THREE.Mesh(
@@ -311,10 +317,9 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
               float spread = 1.0 - smoothstep(0.25, 0.8, edge);
               float front = smoothstep(0.03, 0.18, dot(floorPoint - tube, normal) / cabinetHeight);
               vec2 stone = (floorPoint - tube).xz / cabinetHeight;
-              float grain = fract(sin(dot(floor(stone * 230.0), vec2(12.9898, 78.233))) * 43758.5453);
               float mortar = smoothstep(0.004, 0.014, abs(fract(stone.x * 0.75 + 0.52) - 0.5));
               mortar *= smoothstep(0.003, 0.012, abs(fract(stone.y * 0.64 + 0.21) - 0.5));
-              float surface = mix(0.35, 1.0, mortar) * mix(0.72, 1.0, grain);
+              float surface = mix(0.35, 1.0, mortar);
               float reflected = step(0.0, distance) * step(direction, -0.001) * spread * front;
               float travel = distance / cabinetHeight;
               float falloff = 1.0 / (1.0 + travel * travel * 0.24);
@@ -373,9 +378,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         sceneElement.style.setProperty("--glass-top", `${top}px`);
         sceneElement.style.setProperty("--glass-width", `${screenWidth}px`);
         sceneElement.style.setProperty("--glass-height", `${screenHeight}px`);
-        const roomVisibility = 1 - THREE.MathUtils.smoothstep(progress, 0.08, 0.48);
-        sceneElement.style.setProperty("--room-noise-visibility", String(roomVisibility));
-        sceneElement.style.setProperty("--room-noise-display", roomVisibility > 0 ? "block" : "none");
         sceneElement.style.setProperty("--shutter-opacity", String(1 - THREE.MathUtils.smoothstep(progress, 0.10, 0.48)));
         const power = powerRef.current;
         if (power) {
@@ -390,12 +392,9 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         page.style.transform = `translate(${left}px, ${top + scrollY - entry}px) scale(${scale})`;
         page.style.setProperty("--screen-height", `${screenHeight / scale}px`);
         page.style.setProperty("--content-opacity", String(THREE.MathUtils.smoothstep(progress, 0.55, 1)));
-        const dockReveal = THREE.MathUtils.smoothstep(progress, 0.77, 0.98);
-        page.style.setProperty("--dock-reveal", String(dockReveal));
-        page.style.setProperty("--dock-visibility", dockReveal > 0 ? "visible" : "hidden");
-        const x = (left + right) / 2;
-        const y = (top + bottom) / 2;
-        logo.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%) scale(${scale * width / 480})`;
+        const navReveal = THREE.MathUtils.smoothstep(progress, 0.77, 0.98);
+        page.style.setProperty("--nav-reveal", String(navReveal));
+        page.style.setProperty("--nav-visibility", navReveal > 0 ? "visible" : "hidden");
         // On a narrow screen the two-line hero passes through the wordmark.
         // Clear that space earlier in the zoom, in both scroll directions.
         const logoFade = width < 700
@@ -408,22 +407,28 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         reflection.material.uniforms.strength.value = signal;
         shaft.material.uniforms.powered.value = signal;
         shaft.material.uniforms.lightLevel.value = 1 - THREE.MathUtils.smoothstep(progress, 0.08, 0.35);
-        renderer.render(scene, camera);
+        if (wallFrame === undefined || !powered) renderer.render(scene, camera);
       };
-      let wallLightsTimer: number | undefined;
-      function stopWallLights() {
-        window.clearInterval(wallLightsTimer);
-        wallLightsTimer = undefined;
+      let wallFrame: number | undefined;
+      let lastWallTime = 0;
+      function stopWallAnimation() {
+        if (wallFrame !== undefined) cancelAnimationFrame(wallFrame);
+        wallFrame = undefined;
       }
-      function syncWallLights() {
-        if (document.hidden || !showing || sceneElement.dataset.powered === "false" || window.scrollY > 1) {
-          stopWallLights();
-        } else if (wallLightsTimer === undefined) {
-          // Drift slowly at rest and let scroll-driven frames take over during entry.
-          wallLightsTimer = window.setInterval(() => {
-            shaft.material.uniforms.lightTime.value += 0.1;
-            renderer.render(scene, camera);
-          }, 100);
+      function animateWall(now: number) {
+        const seconds = Math.min(Math.max(0, now - lastWallTime), 100) / 1000;
+        lastWallTime = now;
+        wallTitle.advance(seconds);
+        shaft.material.uniforms.lightTime.value += seconds;
+        renderer.render(scene, camera);
+        wallFrame = requestAnimationFrame(animateWall);
+      }
+      function syncWallAnimation() {
+        if (document.hidden || !showing || sceneElement.dataset.powered === "false") {
+          stopWallAnimation();
+        } else if (wallFrame === undefined) {
+          lastWallTime = performance.now();
+          wallFrame = requestAnimationFrame(animateWall);
         }
       }
       let showing: boolean | undefined;
@@ -441,8 +446,8 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         page.style.removeProperty("transform");
         page.style.removeProperty("--screen-height");
         page.style.removeProperty("--content-opacity");
-        page.style.removeProperty("--dock-reveal");
-        page.style.removeProperty("--dock-visibility");
+        page.style.removeProperty("--nav-reveal");
+        page.style.removeProperty("--nav-visibility");
       };
 
       function settle(duration: number) {
@@ -534,7 +539,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
           }
         }
         if (active) render(scrollY, THREE.MathUtils.clamp(scrollY / (returning ? returnStart() : entry), 0, 1));
-        syncWallLights();
+        syncWallAnimation();
       }
       const onNativeScroll = () => scroll();
       const resize = () => {
@@ -561,7 +566,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       const explicitTune = initialTune();
       let startOnPage = Boolean(
         window.scrollY || window.location.hash || page.contains(document.activeElement) ||
-          page.querySelector('.dock-search[aria-expanded="true"]'),
+          page.querySelector('.nav-search[aria-expanded="true"]'),
       );
       if (!explicitTune) startOnPage ||= lateModel;
       const initialScroll = window.scrollY;
@@ -606,7 +611,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       window.addEventListener("popstate", onHistory);
       window.addEventListener("resize", onResize);
       window.addEventListener("scroll", onNativeScroll, { passive: true });
-      document.addEventListener("visibilitychange", syncWallLights);
+      document.addEventListener("visibilitychange", syncWallAnimation);
       dispose = () => {
         history.scrollRestoration = previousRestoration;
         window.removeEventListener("popstate", onHistory);
@@ -614,8 +619,8 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         wallTitle.dispose();
         wallRef.current = null;
         window.removeEventListener("scroll", onNativeScroll);
-        document.removeEventListener("visibilitychange", syncWallLights);
-        stopWallLights();
+        document.removeEventListener("visibilitychange", syncWallAnimation);
+        stopWallAnimation();
         syncIntroRef.current = null;
         settleRef.current = null;
         clearEdge();
@@ -671,7 +676,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
 
   if (!displayed || (pathname !== "/" && !direct)) return null;
   return <>
-    <ChannelLinks active={displayed} available={available} inShop={pathname === "/" && !skipScene} />
+    <ChannelArrival />
     {panels[displayed.id]}
     {enabled && createPortal(
     <div
@@ -703,24 +708,14 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     >
         <div className="crt-intro-scene" data-powered={poweredOn}>
           <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
-            <span key={selected.id}>{selected.name}</span>
+            <div key={selected.id} className="crt-channel-roll" data-direction={tuned.roll?.direction}
+              onAnimationEnd={() => setTuned(current => current === tuned ? { id: current.id } : current)}>
+              {tuned.roll && <span className="crt-channel-outgoing">{tuned.roll.from}</span>}
+              <span>{selected.name}</span>
+            </div>
           </div>
           <div className="crt-glass-shutter" aria-hidden="true" />
           <div className="crt-intro-stage" ref={stageRef} aria-hidden="true" />
-          {inIntro && (
-            <Noise
-              opacity={0.5}
-              size={1}
-              fps={30}
-              blendMode="overlay"
-              contrast={1}
-              colored={false}
-              dust={0.1}
-              scratches={0}
-              scanlines={0.4}
-              flicker={0.25}
-            />
-          )}
           <div className="tv-readouts">
             <span className="tv-status" data-on={poweredOn}>TV {poweredOn ? "ON" : "OFF"}</span>
             <span className="tv-channel-count">

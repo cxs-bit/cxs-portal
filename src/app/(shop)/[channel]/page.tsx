@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ChannelLinks } from "@/components/channel-links";
+import { ChannelArrival } from "@/components/channel-arrival";
 import { WorkContent, PersonalContent } from "@/components/channel-content";
 import { PortfolioContent } from "@/components/portfolio-content";
 import { channels } from "@/lib/channel-catalog";
@@ -30,9 +30,8 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
 export default async function ChannelPage(props: Props) {
   const active = await destination(props);
   const { work, personal } = await getVisibleChannels();
-  const available = channels.filter(channel => channel.id === "portfolio" || (channel.id === "work" ? work : personal));
   return <>
-    <ChannelLinks active={active} available={available} />
+    <ChannelArrival />
     {active.id === "portfolio" && <PortfolioContent />}
     {active.id === "work" && work && <WorkContent work={work} />}
     {active.id === "personal" && personal && <PersonalContent personal={personal} />}

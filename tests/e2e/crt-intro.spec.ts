@@ -13,6 +13,9 @@ test("opens deep links and repeat visits without fetching the TV model", async (
   await page.evaluate(() => sessionStorage.setItem("cxs-crt-intro-seen", "1"));
   await page.goto("/");
   await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
+  if (page.viewportSize()!.width < 560) {
+    await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Menu" }).click();
+  }
   await expect(page.getByRole("link", { name: "Change channel" })).toBeInViewport();
   expect(models).toBe(0);
 });
@@ -25,7 +28,7 @@ test("returns keyboard access to the page if the TV loses its graphics context",
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator("#portfolio-page")).toHaveJSProperty("inert", false);
   await expect(page.locator("#main")).toBeFocused();
-  await expect(page.getByRole("navigation", { name: "TV channels" })).toBeInViewport();
+  await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeInViewport();
 });
 
 test("allows keyboard entry and remembers it for the session", async ({ page, browserName }) => {
@@ -35,9 +38,9 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   const enter = page.getByRole("button", { name: "Enter Portfolio" });
   await expect(enter).toBeVisible({ timeout: 20000 });
   await expect(enter).toBeFocused();
-  await expect(page.locator(".site-dock")).toBeHidden();
+  await expect(page.locator(".site-card-nav")).toBeHidden();
   await page.keyboard.press("Control+k");
-  await expect(page.locator(".dock-search")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator(".nav-search")).toHaveAttribute("aria-expanded", "false");
   await expect(enter).toBeFocused();
   const power = page.getByRole("button", { name: /(?:Click|Tap) to turn ON\/OFF/ });
   await expect(power).toHaveAttribute("aria-pressed", "true");
@@ -79,10 +82,15 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   await layout.dispose();
   await expect(enter).toHaveCount(0);
   await expect(page.locator("#main")).toBeFocused();
-  await expect(page.locator(".site-dock")).toBeVisible();
+  await expect(page.locator(".site-card-nav")).toBeVisible();
   await page.getByRole("link", { name: "Explore the work" }).click();
   const featureTop = () => page.locator("#featured-work").evaluate(section => section.getBoundingClientRect().top);
-  await expect.poll(featureTop).toBeLessThan(100);
+  const header = page.locator(".site-card-nav");
+  await expect.poll(async () => {
+    const bounds = (await header.boundingBox())!;
+    return await featureTop() - (bounds.y + bounds.height);
+  }).toBeGreaterThanOrEqual(0);
+  await expect.poll(featureTop).toBeLessThan(160);
   const previousTop = await featureTop();
   await page.evaluate(() => { location.hash = "contact"; });
   await expect(page.locator("#contact")).toBeInViewport();
@@ -98,12 +106,10 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   await page.goto("/");
   const intro = page.getByRole("dialog", { name: "TV channel selector" });
   await expect(intro).toBeVisible({ timeout: 20000 });
-  const noise = page.locator(".crt-intro-noise");
-  await expect(noise).toHaveCSS("mix-blend-mode", "overlay");
-  await expect(noise).toHaveCSS("clip-path", /polygon\(evenodd/);
+  await expect(intro.locator(".crt-intro-noise")).toHaveCount(0);
   await expect(page.locator("html")).toHaveClass(/\blenis\b/);
   const portfolio = page.locator("#portfolio-page");
-  const dock = page.locator(".site-dock");
+  const header = page.locator(".site-card-nav");
   const logo = intro.locator(".crt-intro-logo");
   const background = page.locator(".site-crt canvas");
   const viewport = page.viewportSize()!;
@@ -123,13 +129,12 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   await expect.poll(() => logo.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(0.1);
   await expect.poll(async () => (await background.boundingBox())?.width).toBeGreaterThan(initialWidth);
   await page.mouse.wheel(0, Math.round(distance * (0.85 - midpoint)));
-  await expect.poll(() => dock.evaluate(node => Number(getComputedStyle(node).opacity))).toBeGreaterThan(0.1);
-  await expect.poll(() => dock.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(1);
+  await expect.poll(() => header.evaluate(node => Number(getComputedStyle(node).opacity))).toBeGreaterThan(0.1);
+  await expect.poll(() => header.evaluate(node => Number(getComputedStyle(node).opacity))).toBeLessThan(1);
   await expect(portfolio).toHaveJSProperty("inert", true);
 
   await page.mouse.wheel(0, 4000);
   await expect(intro).toHaveCount(0);
-  await expect(noise).toHaveCount(0);
   await expect(portfolio).toHaveCSS("opacity", "1");
   await expect.poll(() => background.boundingBox()).toEqual(frame);
   expect(await heading?.evaluate(node => node === document.querySelector("#hero-title"))).toBe(true);

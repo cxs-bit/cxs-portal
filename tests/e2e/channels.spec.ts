@@ -6,7 +6,10 @@ test("serves direct channel destinations and protects draft assets", async ({ pa
   await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", /\/portfolio$/);
-  const links = page.getByRole("navigation", { name: "TV channels" });
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await navigation.getByRole("button", { name: "Menu" }).click();
+  const links = navigation.getByRole("group", { name: "TV channels" });
+  await expect(links.getByRole("link", { name: "Portfolio", exact: true })).toHaveAttribute("aria-current", "page");
   const published = await links.getByRole("link").allTextContents();
   for (const name of ["Work", "Personal"]) {
     const response = await page.goto("/" + name.toLowerCase());
@@ -52,6 +55,21 @@ test("loads the playlist only after keyboard activation and preserves its dimens
   expect(src.searchParams.get("list")).toBe(url.searchParams.get("list"));
   expect(await player.boundingBox()).toEqual(before);
   await expect(externalLink).toBeVisible();
+});
+
+test("opens direct channel choices when reduced motion disables the selector", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/portfolio");
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  if (page.viewportSize()!.width < 560) {
+    await navigation.getByRole("button", { name: "Menu" }).click();
+  }
+  await navigation.getByRole("link", { name: "Change channel" }).click();
+  await expect(page).toHaveURL("/?tune=portfolio#channels");
+  await expect(page.getByRole("dialog", { name: "TV channel selector" })).toHaveCount(0);
+  const portfolio = navigation.getByRole("group", { name: "TV channels" }).getByRole("link", { name: "Portfolio" });
+  await expect(portfolio).toBeVisible();
+  await expect(portfolio).toHaveAttribute("href", "/portfolio");
 });
 
 test("provides a direct playlist link without JavaScript", async ({ browser }) => {
@@ -109,6 +127,9 @@ test("tunes without navigating and restores the selector through browser history
   await expect(selector).toHaveCount(0);
   await page.reload();
   await expect(selector).toHaveCount(0);
+  if (page.viewportSize()!.width < 560) {
+    await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Menu" }).click();
+  }
   await page.getByRole("link", { name: "Change channel" }).click();
   await expect(enter).toBeVisible({ timeout: 20000 });
 });
