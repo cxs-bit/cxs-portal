@@ -6,7 +6,9 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "@fontsource-variable/figtree";
 import "./globals.css";
-import { NavigationDock } from "@/components/navigation-dock";
+import { SiteNavigation } from "@/components/site-navigation";
+import { channels } from "@/lib/channel-catalog";
+import { getVisibleChannels } from "@/lib/channels";
 import { PointerSpotlight } from "@/components/cursor/PointerSpotlight";
 import { SiteBackground } from "@/components/site-background";
 import { indexable, site, siteUrl } from "@/lib/site";
@@ -20,7 +22,9 @@ export const metadata: Metadata = {
   twitter: { card: "summary_large_image" },
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const visible = await getVisibleChannels();
+  const available = channels.filter(channel => channel.id === "portfolio" || visible[channel.id]);
   return (
     <html lang="en" className="dark">
       <body>
@@ -28,7 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <PointerSpotlight />
         <div id="portfolio-page">
           <a href="#main" className="skip-link">Skip to content</a>
-          <NavigationDock />
+          <SiteNavigation channels={available} email={site.email} social={site.linkedin ? { label: "LinkedIn", href: site.linkedin } : { label: "GitHub", href: site.github }} />
           <main id="main" tabIndex={-1}>{children}</main>
           <footer className="site-footer">
             <div className="site-wrap footer-inner">

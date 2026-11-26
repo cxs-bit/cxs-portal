@@ -12,7 +12,7 @@ test("lights nearby buttons while preserving the native cursor", async ({ page }
   }
 
   const bounds = (await search.boundingBox())!;
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y - 125);
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height + 125);
   await expect(spotlight).toHaveJSProperty("hidden", false);
   await expect(search).toHaveCSS("background-image", /radial-gradient/);
   await page.mouse.move(8, (page.viewportSize()?.height ?? 400) / 2);
@@ -20,6 +20,11 @@ test("lights nearby buttons while preserving the native cursor", async ({ page }
 
   await search.hover();
   await expect(search).toHaveCSS("background-image", /radial-gradient/);
+  await page.goto("/portfolio");
+  const hero = page.getByRole("region", { name: "Building for the web Showing the work" });
+  await hero.getByRole("link", { name: "Explore the work" }).hover();
+  await expect(spotlight).toHaveJSProperty("hidden", true);
+  await expect.poll(() => hero.evaluate(node => getComputedStyle(node, "::before").backgroundImage)).toBe("none");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(spotlight).toHaveJSProperty("hidden", true);
   await expect(search).toHaveCSS("background-image", "none");
@@ -30,6 +35,18 @@ test("supports keyboard navigation and search dismissal", async ({ page }) => {
   await page.goto("/");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to content" })).toBeFocused();
+
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  const menu = navigation.getByRole("button", { name: "Menu" });
+  await menu.focus();
+  await page.keyboard.press("Enter");
+  const portfolio = navigation.getByRole("link", { name: "Portfolio", exact: true });
+  await expect(portfolio).toHaveAttribute("aria-current", "page");
+  await expect(navigation.getByRole("button", { name: "Close" })).toHaveAttribute("aria-expanded", "true");
+  await portfolio.focus();
+  await page.keyboard.press("Escape");
+  await expect(portfolio).toBeHidden();
+  await expect(menu).toBeFocused();
 
   const search = page.getByRole("button", { name: "Search", exact: true });
   await search.focus();
@@ -67,8 +84,8 @@ test("supports keyboard navigation and search dismissal", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/blog/starting-point");
   await expect(page.getByRole("heading", { name: "A starting point" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Devlog" }))
-    .toHaveAttribute("aria-current", "location");
+  await menu.click();
+  await expect(navigation.getByRole("link", { name: "Devlog" })).toHaveAttribute("aria-current", "location");
 });
 
 test("keeps the dark palette and preserves readable reduced-motion layouts", async ({ page }) => {
@@ -79,7 +96,8 @@ test("keeps the dark palette and preserves readable reduced-motion layouts", asy
   await expect(root).toHaveClass(/\bdark\b/);
   await expect(root).toHaveCSS("color-scheme", "dark");
   const background = page.locator(".site-crt");
-  await expect(background).toHaveCSS("background-color", "rgb(9, 28, 27)");
+  await expect(background).toHaveCSS("background-color", "rgb(23, 25, 29)");
+  await expect(page.getByRole("link", { name: "Explore the work" })).toHaveCSS("background-color", "rgb(96, 177, 234)");
   await expect(root).not.toHaveClass(/\blenis\b/);
   await expect(page.getByRole("combobox", { name: "Color theme" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeVisible();
@@ -90,8 +108,9 @@ test("keeps the dark palette and preserves readable reduced-motion layouts", asy
   await expect(background).toHaveCSS("background-image", "none");
   await expect(background.locator("canvas")).toHaveCount(0);
   await background.evaluate((element) => element.setAttribute("data-test-retained", "true"));
-  const dock = page.locator(".site-dock");
-  await expect(dock).toHaveCSS("position", "fixed");
+  const header = page.locator(".site-card-nav");
+  const menu = header.getByRole("button", { name: "Menu" });
+  await expect(header).toHaveCSS("position", "fixed");
 
   for (const width of [320, 640, 768, 1280]) {
     await page.setViewportSize({ width, height: 840 });
@@ -99,22 +118,27 @@ test("keeps the dark palette and preserves readable reduced-motion layouts", asy
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ), { message: `Page overflows at ${width}px` }).toBe(true);
     await expect.poll(async () => {
-      const bounds = (await dock.boundingBox())!;
-      return Math.abs(bounds.x + bounds.width / 2 - width / 2) < 2 && bounds.y + bounds.height < 840;
+      const bounds = (await header.boundingBox())!;
+      return Math.abs(bounds.x + bounds.width / 2 - width / 2) < 2
+        && bounds.y >= 0 && bounds.y + bounds.height < 120
+        && bounds.x >= 0 && bounds.x + bounds.width <= width;
     }).toBe(true);
   }
 
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.getByRole("link", { name: "Explore the work" })).toBeInViewport();
 
-  await dock.getByRole("link", { name: "Projects" }).click();
+  await menu.click();
+  await header.getByRole("link", { name: "Projects" }).click();
   await expect(page.getByRole("heading", { name: "Rally Scoring" })).toBeVisible();
-  await expect(dock.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+  await expect(header.getByRole("link", { name: "Projects" })).toBeHidden();
+  await menu.click();
+  await expect(header.getByRole("link", { name: "Projects" })).toHaveAttribute("aria-current", "page");
   await expect(background).toBeVisible();
   await expect(background).toHaveAttribute("data-test-retained", "true");
   await expect(page.getByRole("link", { name: "Visit Rally Scoring" })).toHaveAttribute("href", "https://rally-scoring.vercel.app/");
   await expect(page.getByRole("img", { name: /Standings ranked by team score/ })).toBeVisible();
-  await dock.getByRole("link", { name: "Devlog" }).click();
+  await header.getByRole("link", { name: "Devlog" }).click();
   await page.getByRole("link", { name: "A starting point" }).click();
   await expect(page.getByRole("heading", { name: "A starting point" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to the devlog" })).toBeVisible();
