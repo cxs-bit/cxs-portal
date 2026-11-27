@@ -239,7 +239,8 @@ html:has(#tv-startup[open]) { overflow: hidden; }
   font-weight: 580;
   line-height: 1.35;
   white-space: nowrap;
-  text-shadow: 0 1px .55rem #030705;
+  padding: .06em .4em;
+  background: rgb(12 13 14 / 88%);
   transition: color 160ms ease-out;
 }
 .crt-power-label strong { font-weight: 720; letter-spacing: .025em; }

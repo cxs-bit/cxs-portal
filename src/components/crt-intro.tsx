@@ -10,7 +10,7 @@ import { channels, type ChannelId } from "@/lib/channel-catalog";
 import { rememberChannelVisit, tvSessionKey } from "@/lib/tv-session";
 import { ChannelArrival } from "./channel-arrival";
 import { VisitClock } from "./visit-clock";
-import { createCalibrationMural } from "./tv-calibration-mural";
+import { createRecordWall } from "./tv-record-wall";
 
 const motionQuery = "(prefers-reduced-motion: no-preference)";
 
@@ -33,7 +33,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const selected = available.find(item => item.id === tuned.id) ?? available[0];
   const position = available.indexOf(selected) + 1;
   const displayed = shopSession ? selected : direct;
-  const wallRef = useRef<((channel: ChannelId) => void) | null>(null);
 
   const motionAllowed = useSyncExternalStore(subscribe, () => window.matchMedia(motionQuery).matches, () => false);
   const [unavailable, setUnavailable] = useState(false);
@@ -62,7 +61,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     const id = new URLSearchParams(location.search).get("tune");
     const item = available.find(channel => channel.id === id);
     if (item) setTuned({ id: item.id });
-    return item?.id ?? selected.id;
   });
   const commitEntry = useEffectEvent(() => {
     if (location.pathname !== "/") return;
@@ -281,9 +279,9 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       shaft.position.y = floor.position.y + cabinetHeight * 1.25;
       shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
       scene.add(shaft);
-      const mural = createCalibrationMural(THREE, initialTune());
-      scene.add(mural.wall);
-      wallRef.current = mural.tune;
+      initialTune();
+      const records = createRecordWall(THREE);
+      scene.add(records.wall);
       // Trace a reflected viewing ray to the tube and soften its footprint on the floor.
       const reflection = new THREE.Mesh(
         new THREE.PlaneGeometry(cabinetHeight * 10, cabinetHeight * 10),
@@ -409,27 +407,8 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         reflection.material.uniforms.strength.value = signal;
         shaft.material.uniforms.powered.value = signal;
         shaft.material.uniforms.lightLevel.value = 1 - THREE.MathUtils.smoothstep(progress, 0.08, 0.35);
-        mural.mark.visible = powered;
-        mural.update(performance.now());
         renderer.render(scene, camera);
       };
-      let wallFrame: number | undefined;
-      function stopWallAnimation() {
-        if (wallFrame !== undefined) cancelAnimationFrame(wallFrame);
-        wallFrame = undefined;
-      }
-      function animateWall(now: number) {
-        const moving = mural.update(now);
-        renderer.render(scene, camera);
-        wallFrame = moving ? requestAnimationFrame(animateWall) : undefined;
-      }
-      function syncWallAnimation() {
-        if (document.hidden || !showing || sceneElement.dataset.powered === "false") {
-          stopWallAnimation();
-        } else if (wallFrame === undefined && mural.update(performance.now())) {
-          wallFrame = requestAnimationFrame(animateWall);
-        }
-      }
       let showing: boolean | undefined;
       let returning = false;
       let settling = false;
@@ -538,7 +517,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
           }
         }
         if (active) render(scrollY, THREE.MathUtils.clamp(scrollY / (returning ? returnStart() : entry), 0, 1));
-        syncWallAnimation();
       }
       const onNativeScroll = () => scroll();
       const resize = () => {
@@ -549,12 +527,12 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         camera.fov = width < 700 ? 52 : 35;
         const startDistance = distance * Math.max(1.34, 0.68 / camera.aspect);
         start.copy(center).addScaledVector(normal, startDistance).add(new THREE.Vector3(-distance * 0.38, distance * 0.04, 0));
-        // Place the painted wall once for this framing. It stays put during the zoom.
+        // Anchor the sleeves to the back wall at the floor line during the zoom.
         const wallNormal = start.clone().sub(center).setY(0).normalize();
-        mural.wall.position.copy(center).addScaledVector(wallNormal, -cabinetHeight * 0.82);
-        mural.wall.position.y = floor.position.y + cabinetHeight * 0.43;
-        mural.wall.rotation.y = Math.atan2(wallNormal.x, wallNormal.z);
-        mural.wall.scale.setScalar(cabinetHeight * 2.9);
+        records.wall.position.copy(center).addScaledVector(wallNormal, -cabinetHeight * 0.82);
+        records.wall.position.y = floor.position.y + cabinetHeight * 0.01;
+        records.wall.rotation.y = Math.atan2(wallNormal.x, wallNormal.z);
+        records.wall.scale.setScalar(cabinetHeight * (width < 700 ? 0.54 : 0.49));
         // Stop when the glass fills both axes. Traveling farther leaves the
         // visitor scrolling over a full-size page whose links are still inert.
         const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
@@ -573,6 +551,10 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
+      // The room and its controls are ready independently of artwork or YouTube.
+      void records.load(request.signal, () => {
+        if (showing && !document.hidden) renderer.render(scene, camera);
+      }).catch(() => {});
       if (startOnPage) startup?.close();
       syncIntroRef.current = scroll;
       settleRef.current = settle;
@@ -611,19 +593,16 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       window.addEventListener("resize", onResize);
       window.addEventListener("scroll", onNativeScroll, { passive: true });
       const onVisibilityChange = () => {
-        if (document.hidden) stopWallAnimation();
-        else scroll(true);
+        if (!document.hidden) scroll(true);
       };
       document.addEventListener("visibilitychange", onVisibilityChange);
       dispose = () => {
         history.scrollRestoration = previousRestoration;
         window.removeEventListener("popstate", onHistory);
         window.removeEventListener("resize", onResize);
-        mural.dispose();
-        wallRef.current = null;
+        records.dispose();
         window.removeEventListener("scroll", onNativeScroll);
         document.removeEventListener("visibilitychange", onVisibilityChange);
-        stopWallAnimation();
         syncIntroRef.current = null;
         settleRef.current = null;
         clearEdge();
@@ -677,10 +656,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     if (window.cxsTvStartup) window.cxsTvStartup.ready(focusControls);
     else focusControls(false);
   }, [enabled, inIntro]);
-
-  useEffect(() => {
-    wallRef.current?.(selected.id);
-  }, [selected.id]);
 
   useEffect(() => {
     syncIntroRef.current?.(true);
