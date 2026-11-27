@@ -144,6 +144,57 @@ button:not(:disabled), select { cursor: pointer; }
 .skip-link { position: fixed; z-index: 50; inset: 0.75rem auto auto 0.75rem; padding: 0.75rem 1rem; background: var(--page); transform: translateY(-200%); }
 .skip-link:focus { transform: none; }
 
+#tv-startup[open], #tv-startup[data-phase="revealing"] {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: var(--page);
+  color: var(--ink);
+}
+#tv-startup::backdrop { background: transparent; }
+html:has(#tv-startup[open]) { overflow: hidden; }
+.tv-startup-signal, #tv-startup .tv-startup-skip { visibility: hidden; }
+#tv-startup[data-phase] :is(.tv-startup-signal, .tv-startup-skip) { visibility: visible; }
+.tv-startup-signal {
+  position: absolute;
+  inset: 50% 0 auto;
+  text-align: center;
+  color: var(--muted-text);
+  font: .94rem/1.5 var(--mono);
+}
+.tv-startup-line {
+  display: block;
+  width: clamp(3rem, 8vw, 6rem);
+  height: 2px;
+  margin: 0 auto 1.25rem;
+  background: #60b1ea;
+}
+.tv-startup-skip {
+  position: absolute;
+  z-index: 2;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: .75rem 1rem;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: .22em;
+}
+#tv-startup[data-phase="revealing"] {
+  display: block;
+  z-index: 110;
+  pointer-events: none;
+  animation: tv-startup-reveal 200ms ease-in-out forwards;
+}
+#tv-startup[data-phase="revealing"] .tv-startup-line { animation: tv-startup-widen 200ms ease-in-out forwards; }
+@keyframes tv-startup-reveal { to { opacity: 0; } }
+@keyframes tv-startup-widen { to { transform: scaleX(3); } }
 .crt-intro { position: fixed; inset: 0; z-index: 100; overflow: hidden; }
 .crt-intro-scene { position: relative; top: 0; height: 100dvh; overflow: hidden; }
 .crt-intro-stage { position: absolute; inset: 0; }

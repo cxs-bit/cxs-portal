@@ -1,17 +1,16 @@
 "use client";
 
-import { type ReactNode, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useEffect, useEffectEvent, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type Lenis from "lenis";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { channels, type ChannelId } from "@/lib/channel-catalog";
+import { rememberChannelVisit, tvSessionKey } from "@/lib/tv-session";
 import { ChannelArrival } from "./channel-arrival";
 import { VisitClock } from "./visit-clock";
 import { createWallTitle } from "./tv-wall-title";
-
-const sessionKey = "cxs-crt-intro-seen";
 
 const motionQuery = "(prefers-reduced-motion: no-preference)";
 
@@ -40,10 +39,11 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const [unavailable, setUnavailable] = useState(false);
   const [skipScene] = useState(() => {
     if (typeof window === "undefined") return false;
+    if (window.cxsTvStartup?.skipped) return true;
     const tune = new URLSearchParams(location.search).get("tune");
     if (available.some(channel => channel.id === tune) && !location.hash) return false;
     if (location.hash) return true;
-    try { return sessionStorage.getItem(sessionKey) === "1"; } catch { return false; }
+    try { return sessionStorage.getItem(tvSessionKey) === "1"; } catch { return false; }
   });
   const enabled = shopSession && motionAllowed && !skipScene && !unavailable;
   const [inIntro, setInIntro] = useState(false);
@@ -52,6 +52,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const enterRef = useRef<HTMLButtonElement>(null);
+  const skipRef = useRef<HTMLAnchorElement>(null);
   const powerRef = useRef<HTMLButtonElement>(null);
   const lenisRef = useRef<Lenis | null>(null);
   const syncIntroRef = useRef<((force?: boolean) => void) | null>(null);
@@ -61,7 +62,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     const id = new URLSearchParams(location.search).get("tune");
     const item = available.find(channel => channel.id === id);
     if (item) setTuned({ id: item.id });
-    return Boolean(item);
   });
   const commitEntry = useEffectEvent(() => {
     if (location.pathname !== "/") return;
@@ -117,6 +117,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   useEffect(() => {
     const page = document.getElementById("portfolio-page")!;
     if (!enabled) {
+      if (skipScene || unavailable) window.cxsTvStartup?.close();
       page.dataset.crtIntro = skipScene && !unavailable ? "ready" : "static";
       return () => { delete page.dataset.crtIntro; };
     }
@@ -124,12 +125,25 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     const stage = stageRef.current;
     const logo = logoRef.current;
     const sceneElement = stage.parentElement!;
+    const startup = window.cxsTvStartup;
+    const skip = () => {
+      const directChannel = channels.find(channel => channel.href === location.pathname);
+      setTuned({ id: directChannel?.id ?? "portfolio" });
+      setUnavailable(true);
+    };
+    if (startup?.skipped) { skip(); return; }
+    window.addEventListener("tv-startup-skip", skip);
+    startup?.start();
     page.dataset.crtIntro = "loading";
     const request = new AbortController();
     let cancelled = false;
     let dispose = () => {};
     // A mobile browser may reclaim the GPU while the page is in the background.
-    const onContextLoss = () => { if (!cancelled) setUnavailable(true); };
+    const onContextLoss = () => {
+      if (cancelled) return;
+      if (startup) startup.fallback();
+      else skip();
+    };
     stage.addEventListener("webglcontextlost", onContextLoss, true);
 
     async function setup() {
@@ -533,7 +547,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
             clearPreview();
             if (wasShowing) {
               if (!restoring) commitEntry();
-              try { sessionStorage.setItem(sessionKey, "1"); } catch { /* Storage is optional. */ }
+              rememberChannelVisit();
               document.getElementById("main")?.focus({ preventScroll: true });
             }
           }
@@ -559,22 +573,17 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         entry = Math.round(height * 0.78);
         page.style.marginTop = `${entry}px`;
       };
-      // A slow model download can arrive after the visitor has started reading.
-      // Keep that page in place and let them scroll up to see the television.
-      const download = performance.getEntriesByName(modelUrl.href, "resource").at(-1);
-      const lateModel = (download?.duration ?? 0) > 1800;
-      const explicitTune = initialTune();
-      let startOnPage = Boolean(
-        window.scrollY || window.location.hash || page.contains(document.activeElement) ||
-          page.querySelector('.nav-search[aria-expanded="true"]'),
+      initialTune();
+      const startOnPage = Boolean(
+        window.location.hash || (!document.getElementById("tv-startup")?.hasAttribute("open") &&
+          (window.scrollY || page.contains(document.activeElement) || page.querySelector('.nav-search[aria-expanded="true"]'))),
       );
-      if (!explicitTune) startOnPage ||= lateModel;
       const initialScroll = window.scrollY;
       resize();
       if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
-      if (lateModel && startOnPage) page.dataset.crtIntro = "static";
+      if (startOnPage) startup?.close();
       syncIntroRef.current = scroll;
       settleRef.current = settle;
       const onResize = () => {
@@ -647,12 +656,11 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         renderer.domElement.remove();
       };
     }
-    void setup().catch(() => {
-      if (cancelled) return;
-      setUnavailable(true);
-    });
+    void setup().catch(onContextLoss);
     return () => {
       cancelled = true;
+      window.removeEventListener("tv-startup-skip", skip);
+      startup?.close();
       request.abort();
       stage.removeEventListener("webglcontextlost", onContextLoss, true);
       const restoreFocus = page.inert;
@@ -662,8 +670,18 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     };
   }, [enabled, skipScene, unavailable]);
 
-  useEffect(() => {
-    if (enabled && inIntro) enterRef.current?.focus({ preventScroll: true });
+  useLayoutEffect(() => {
+    if (!enabled || !inIntro) return;
+    const focusControls = (keepSkip: boolean) => {
+      if (keepSkip && skipRef.current) {
+        skipRef.current.hidden = false;
+        skipRef.current.focus({ preventScroll: true });
+      } else {
+        enterRef.current?.focus({ preventScroll: true });
+      }
+    };
+    if (window.cxsTvStartup) window.cxsTvStartup.ready(focusControls);
+    else focusControls(false);
   }, [enabled, inIntro]);
 
   useEffect(() => {
@@ -696,7 +714,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         } else if (event.key === "Tab") {
           event.preventDefault();
           event.currentTarget.dataset.keyboardCue = "";
-          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"))
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), a:not([hidden])"))
             .filter(control => control.getClientRects().length && getComputedStyle(control).visibility === "visible");
           const current = controls.findIndex((control) => control === document.activeElement);
           const offset = event.shiftKey ? -1 : 1;
@@ -706,6 +724,11 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       onWheel={(event) => { delete event.currentTarget.dataset.keyboardCue; }}
       onPointerDown={(event) => { delete event.currentTarget.dataset.keyboardCue; }}
     >
+        <a ref={skipRef} className="tv-startup-skip" href="#main" hidden
+          onClick={event => { event.preventDefault(); window.cxsTvStartup?.fallback(); }}
+          onBlur={event => { event.currentTarget.hidden = true; }}>
+          Skip to portfolio
+        </a>
         <div className="crt-intro-scene" data-powered={poweredOn}>
           <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
             <div key={selected.id} className="crt-channel-roll" data-direction={tuned.roll?.direction}
