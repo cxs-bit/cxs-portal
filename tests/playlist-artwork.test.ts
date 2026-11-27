@@ -32,7 +32,7 @@ describe("playlist artwork", () => {
         headers: { "X-Goog-Api-Key": apiKey },
         redirect: "error",
         signal: expect.any(AbortSignal),
-        next: { revalidate: 3600 },
+        cache: "no-store",
       },
     );
   });
@@ -71,7 +71,7 @@ describe("playlist artwork", () => {
         headers: undefined,
         redirect: "error",
         signal: expect.any(AbortSignal),
-        next: { revalidate: 3600 },
+        cache: "no-store",
       },
     );
   });

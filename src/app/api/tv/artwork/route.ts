@@ -6,10 +6,10 @@ export async function GET() {
   const { personal } = await getPublishedChannels();
   const covers = await getPlaylistArtwork(personal?.playlist, apiKey);
   return Response.json({ covers: covers ?? [] }, {
+    status: covers === null ? 503 : 200,
     headers: {
-      "Cache-Control": covers
-        ? "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
-        : "public, max-age=0, s-maxage=60",
+      "Cache-Control": "no-store",
+      "Vercel-CDN-Cache-Control": covers === null ? "no-store" : "public, s-maxage=30",
     },
   });
 }

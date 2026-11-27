@@ -410,6 +410,20 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         renderer.render(scene, camera);
       };
       let showing: boolean | undefined;
+      let loadingArtwork = false;
+      async function refreshArtwork() {
+        if (!showing || document.hidden || loadingArtwork || request.signal.aborted) return;
+        loadingArtwork = true;
+        try {
+          await records.load(request.signal, () => {
+            if (showing && !document.hidden) renderer.render(scene, camera);
+          });
+        } catch {
+          // Keep the current wall on a network failure. The next check retries.
+        } finally {
+          loadingArtwork = false;
+        }
+      }
       let returning = false;
       let settling = false;
       let lastScrollY = -1;
@@ -497,6 +511,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
+          if (active) void refreshArtwork();
           returning = backingOut;
           page.classList.toggle("crt-page-preview", active);
           page.inert = active;
@@ -551,10 +566,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
-      // The room and its controls are ready independently of artwork or YouTube.
-      void records.load(request.signal, () => {
-        if (showing && !document.hidden) renderer.render(scene, camera);
-      }).catch(() => {});
+      const artworkTimer = window.setInterval(refreshArtwork, 60_000);
       if (startOnPage) startup?.close();
       syncIntroRef.current = scroll;
       settleRef.current = settle;
@@ -593,13 +605,17 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       window.addEventListener("resize", onResize);
       window.addEventListener("scroll", onNativeScroll, { passive: true });
       const onVisibilityChange = () => {
-        if (!document.hidden) scroll(true);
+        if (!document.hidden) {
+          scroll(true);
+          void refreshArtwork();
+        }
       };
       document.addEventListener("visibilitychange", onVisibilityChange);
       dispose = () => {
         history.scrollRestoration = previousRestoration;
         window.removeEventListener("popstate", onHistory);
         window.removeEventListener("resize", onResize);
+        window.clearInterval(artworkTimer);
         records.dispose();
         window.removeEventListener("scroll", onNativeScroll);
         document.removeEventListener("visibilitychange", onVisibilityChange);
