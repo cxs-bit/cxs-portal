@@ -1,22 +1,39 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+const tvModelPath = "/models/crt-tv.glb";
 
 test("opens deep links and repeat visits without fetching the TV model", async ({ page }) => {
   let models = 0;
   page.on("request", request => {
-    if (new URL(request.url()).pathname === "/models/crt-tv.glb") models++;
+    if (new URL(request.url()).pathname === tvModelPath) models++;
   });
   await page.goto("/#contact");
   await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
   await expect(page.locator("#contact")).toBeInViewport();
+  await expect(page.getByText("Tuning in…", { exact: true })).toBeHidden();
   await page.goto("/portfolio#contact");
   await expect(page.locator("#contact")).toBeInViewport();
-  await page.evaluate(() => sessionStorage.setItem("cxs-crt-intro-seen", "1"));
+  await expect(page.getByText("Tuning in…", { exact: true })).toBeHidden();
+  await expect.poll(() => page.evaluate(() => sessionStorage.getItem("cxs-crt-intro-seen"))).toBe("1");
   await page.goto("/");
   await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
   if (page.viewportSize()!.width < 560) {
     await page.getByRole("navigation", { name: "Main navigation" }).getByRole("button", { name: "Menu" }).click();
   }
   await expect(page.getByRole("link", { name: "Change channel" })).toBeInViewport();
+  expect(models).toBe(0);
+});
+
+test("bypasses the TV preloader on a fresh visit with reduced motion", async ({ page }) => {
+  let models = 0;
+  page.on("request", request => {
+    if (new URL(request.url()).pathname === tvModelPath) models++;
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "static");
+  await expect(page.getByText("Tuning in…", { exact: true })).toBeHidden();
+  await expect(page.getByRole("link", { name: "Skip to portfolio" })).toHaveCount(0);
   expect(models).toBe(0);
 });
 
@@ -94,6 +111,7 @@ test("allows keyboard entry and remembers it for the session", async ({ page, br
   const previousTop = await featureTop();
   await page.evaluate(() => { location.hash = "contact"; });
   await expect(page.locator("#contact")).toBeInViewport();
+  await expect(page.getByText("Tuning in…", { exact: true })).toBeHidden();
   await page.goBack({ waitUntil: "commit" });
   await expect(page).toHaveURL(/\/portfolio#featured-work$/);
   await expect.poll(async () => Math.abs(await featureTop() - previousTop)).toBeLessThan(2);
@@ -171,17 +189,105 @@ test("scrolls into the page, back into the TV, and into the page again", async (
   await expect(page.locator("#main")).toBeFocused();
 });
 
-test("keeps a slow-loading model above the page the visitor is reading", async ({ page, browserName }) => {
-  test.skip(browserName !== "chromium", "This test uses Chromium's software WebGL renderer.");
-  await page.route("**/models/crt-tv.glb", async route => {
-    await new Promise(resolve => setTimeout(resolve, 2100));
-    await route.continue();
+async function holdTvModel(page: Page) {
+  const response = Promise.withResolvers<"continue" | "abort">();
+  await page.route(`**${tvModelPath}`, async route => {
+    const action = await response.promise;
+    if (action === "continue") await route.continue();
+    else await route.abort();
   });
-  await page.goto("/");
-  const portfolio = page.locator("#portfolio-page");
-  await expect.poll(() => portfolio.evaluate(element => parseFloat(element.style.marginTop)), { timeout: 20000 }).toBeGreaterThan(0);
-  await expect(page.getByRole("heading", { name: "Building for the web Showing the work" })).toBeInViewport();
+  return response.resolve;
+}
+
+test("can skip before the application scripts arrive", async ({ page }) => {
+  await page.route("**/_next/static/**/*.js", route => route.abort());
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  const skip = page.getByRole("link", { name: "Skip to portfolio" });
+  await expect(skip).toBeVisible();
+  await skip.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main")).toBeFocused();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-  await expect(page.getByRole("dialog", { name: "TV channel selector" })).toBeVisible({ timeout: 15000 });
 });
+
+for (const focusSkip of [false, true]) {
+  test(`reveals the selector after loading with ${focusSkip ? "Skip" : "Enter"} focused`, async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "Uses Chromium's software WebGL renderer.");
+    const release = await holdTvModel(page);
+    try {
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const status = page.getByRole("status").filter({ hasText: /^Tuning in…$/ });
+      const skip = page.getByRole("link", { name: "Skip to portfolio" });
+      const enter = page.getByRole("button", { name: "Enter Portfolio" });
+      await expect(status).toBeVisible();
+      await expect(skip).toBeVisible();
+      if (focusSkip) {
+        await skip.focus();
+        await expect(skip).toBeFocused();
+      }
+      release("continue");
+      await expect(enter).toBeEnabled({ timeout: 10000 });
+      await expect(status).toBeHidden();
+      await expect(focusSkip ? skip : enter).toBeFocused();
+      if (focusSkip) {
+        await page.keyboard.press("Enter");
+        await expect(page.locator("#main")).toBeFocused();
+        await expect(page.getByRole("dialog", { name: "TV channel selector" })).toHaveCount(0);
+      }
+    } finally {
+      release("abort");
+    }
+  });
+}
+
+test("skips a pending TV intro and still allows changing channels", async ({ page, browserName }) => {
+  test.skip(browserName !== "chromium", "Uses Chromium's software WebGL renderer.");
+  const release = await holdTvModel(page);
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const skip = page.getByRole("link", { name: "Skip to portfolio" });
+    await expect(skip).toBeVisible();
+    await skip.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#main")).toBeFocused();
+    await expect(page).toHaveURL(url => url.pathname === "/" && !url.search && ["", "#main"].includes(url.hash));
+    await expect(skip).toHaveCount(0);
+
+    release("continue");
+    await page.unrouteAll({ behavior: "wait" });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
+    await expect(page.getByRole("dialog", { name: "TV channel selector" })).toHaveCount(0);
+    const navigation = page.getByRole("navigation", { name: "Main navigation" });
+    if (page.viewportSize()!.width < 560) {
+      await navigation.getByRole("button", { name: "Menu" }).click();
+    }
+    await navigation.getByRole("link", { name: "Change channel" }).click();
+    await expect(page.getByRole("button", { name: "Enter Portfolio" })).toBeEnabled({ timeout: 10000 });
+  } finally {
+    release("abort");
+  }
+});
+
+for (const failure of ["failed", "stalled"] as const) {
+  test(`opens the homepage when the TV model has ${failure}`, async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "Uses Chromium's software WebGL renderer.");
+    const release = await holdTvModel(page);
+    try {
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      const status = page.getByRole("status").filter({ hasText: /^Tuning in…$/ });
+      await expect(status).toBeVisible();
+      if (failure === "failed") release("abort");
+      await expect(page.locator("#main")).toBeFocused({ timeout: 15000 });
+      await expect(status).toHaveCount(0);
+      await expect(page).toHaveURL("/");
+      release("abort");
+      await page.unrouteAll({ behavior: "wait" });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
+      await expect(page.getByRole("dialog", { name: "TV channel selector" })).toHaveCount(0);
+    } finally {
+      release("abort");
+    }
+  });
+}
