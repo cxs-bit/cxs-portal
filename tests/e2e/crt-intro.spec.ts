@@ -281,10 +281,7 @@ for (const failure of ["failed", "stalled"] as const) {
       await expect(page.locator("#main")).toBeFocused({ timeout: 15000 });
       await expect(status).toHaveCount(0);
       await expect(page).toHaveURL("/");
-      release("abort");
-      await page.unrouteAll({ behavior: "wait" });
-      await page.reload({ waitUntil: "domcontentloaded" });
-      await expect(page.locator("#portfolio-page")).toHaveAttribute("data-crt-intro", "ready");
+      await expect.poll(() => page.evaluate(() => sessionStorage.getItem("cxs-crt-intro-seen"))).toBe("1");
       await expect(page.getByRole("dialog", { name: "TV channel selector" })).toHaveCount(0);
     } finally {
       release("abort");
