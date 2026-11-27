@@ -144,7 +144,7 @@ button:not(:disabled), select { cursor: pointer; }
 .skip-link { position: fixed; z-index: 50; inset: 0.75rem auto auto 0.75rem; padding: 0.75rem 1rem; background: var(--page); transform: translateY(-200%); }
 .skip-link:focus { transform: none; }
 
-#tv-startup[open] {
+#tv-startup[open], #tv-startup[data-phase="revealing"] {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -186,7 +186,12 @@ html:has(#tv-startup[open]) { overflow: hidden; }
   text-decoration: underline;
   text-underline-offset: .22em;
 }
-#tv-startup[data-phase="revealing"] { animation: tv-startup-reveal 200ms ease-in-out forwards; }
+#tv-startup[data-phase="revealing"] {
+  display: block;
+  z-index: 110;
+  pointer-events: none;
+  animation: tv-startup-reveal 200ms ease-in-out forwards;
+}
 #tv-startup[data-phase="revealing"] .tv-startup-line { animation: tv-startup-widen 200ms ease-in-out forwards; }
 @keyframes tv-startup-reveal { to { opacity: 0; } }
 @keyframes tv-startup-widen { to { transform: scaleX(3); } }
