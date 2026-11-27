@@ -10,6 +10,7 @@ import { SiteNavigation } from "@/components/site-navigation";
 import { channels } from "@/lib/channel-catalog";
 import { getVisibleChannels } from "@/lib/channels";
 import { PointerSpotlight } from "@/components/cursor/PointerSpotlight";
+import { TvStartup } from "@/components/tv-startup";
 import { SiteBackground } from "@/components/site-background";
 import { indexable, site, siteUrl } from "@/lib/site";
 
@@ -28,6 +29,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en" className="dark">
       <body>
+        <TvStartup channels={available.map(channel => channel.id)} />
         <SiteBackground />
         <PointerSpotlight />
         <div id="portfolio-page">
