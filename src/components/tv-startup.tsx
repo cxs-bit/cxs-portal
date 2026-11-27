@@ -13,6 +13,7 @@ const bootstrap = (channelIds: readonly string[]) => `(() => {
     clearTimeout(revealTimer);
     if (dialog.open) dialog.close();
     delete dialog.dataset.phase;
+    dialog.inert = false;
   }
   function fallback() {
     skipped = true;
@@ -43,16 +44,15 @@ const bootstrap = (channelIds: readonly string[]) => `(() => {
     if (dialog.open && performance.now() - startedAt >= 10000) { fallback(); return; }
     clearTimeout(showTimer);
     clearTimeout(deadline);
-    const reveal = () => {
-      const keepSkip = dialog.open && document.activeElement === skip;
-      close();
-      onReveal(keepSkip);
-    };
-    if (dialog.open && dialog.dataset.phase === "waiting") {
+    const animate = dialog.open && dialog.dataset.phase === "waiting";
+    const keepSkip = dialog.open && document.activeElement === skip;
+    close();
+    onReveal(keepSkip);
+    if (animate) {
+      // Hand the keyboard to the live TV before the visual fade starts.
+      dialog.inert = true;
       dialog.dataset.phase = "revealing";
-      revealTimer = setTimeout(reveal, 200);
-    } else {
-      reveal();
+      revealTimer = setTimeout(close, 200);
     }
   }
   dialog.addEventListener("cancel", event => { event.preventDefault(); fallback(); });
