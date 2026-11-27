@@ -45,41 +45,59 @@ export function createRecordWall(THREE: typeof Three) {
   });
   wall.visible = false;
 
+  let fallback: ImageBitmap | null = null;
+  const displayed: (string | undefined)[] = [];
+
+  function publish(redraw: () => void) {
+    wall.visible = true;
+    texture.needsUpdate = true;
+    redraw();
+  }
+
   async function load(signal: AbortSignal, redraw: () => void) {
-    const fallback = await loadImage("/images/tv/record-sleeves.webp", signal).catch(() => null);
-    if (fallback && !signal.aborted) {
-      ink.drawImage(fallback, 0, 0, canvas.width, canvas.height);
-      texture.needsUpdate = true;
-      wall.visible = true;
-      redraw();
+    if (!fallback) {
+      const image = await loadImage("/images/tv/record-sleeves.webp", signal).catch(() => null);
+      if (signal.aborted) { image?.close(); return; }
+      if (image) {
+        fallback = image;
+        ink.drawImage(image, 0, 0, canvas.width, canvas.height);
+        displayed.length = 0;
+        publish(redraw);
+      }
     }
-    fallback?.close();
-    if (signal.aborted) return;
-    const result = await fetch("/api/tv/artwork", { signal });
+    const result = await fetch("/api/tv/artwork", { signal, cache: "no-store" });
     if (!result.ok) return;
     const { covers }: { covers: string[] } = await result.json();
-    if (!covers.length) return;
-
-    // Batch the texture upload; individual failed images keep their local art.
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(6500)]);
-    const loaded = await Promise.allSettled(covers.slice(0, sleeves.length).map(async (url, i) => {
-      const cover = await loadImage(url, deadline);
-      if (!signal.aborted) {
-        const tile = sleeves[i][3];
-        const size = Math.min(cover.width, cover.height);
-        ink.drawImage(cover, (cover.width - size) / 2, (cover.height - size) / 2, size, size,
-          (tile % 4) * cell, Math.floor(tile / 4) * cell, cell, cell);
+    let changed = false;
+    await Promise.allSettled(sleeves.map(async ([, , , tile], i) => {
+      const url = covers[i];
+      if (url === displayed[i]) return;
+      const x = (tile % 4) * cell;
+      const y = Math.floor(tile / 4) * cell;
+      if (url) {
+        const cover = await loadImage(url, deadline);
+        try {
+          if (signal.aborted) return;
+          const size = Math.min(cover.width, cover.height);
+          ink.drawImage(cover, (cover.width - size) / 2, (cover.height - size) / 2, size, size,
+            x, y, cell, cell);
+        } finally {
+          cover.close();
+        }
+      } else if (fallback) {
+        ink.drawImage(fallback, x, y, cell, cell, x, y, cell, cell);
+      } else {
+        ink.clearRect(x, y, cell, cell);
       }
-      cover.close();
+      displayed[i] = url;
+      changed = true;
     }));
-    if (!signal.aborted && loaded.some(item => item.status === "fulfilled")) {
-      wall.visible = true;
-      texture.needsUpdate = true;
-      redraw();
-    }
+    if (changed && !signal.aborted) publish(redraw);
   }
 
   function dispose() {
+    fallback?.close();
     geometries.forEach(geometry => geometry.dispose());
     material.dispose();
     texture.dispose();

@@ -38,7 +38,7 @@ export async function getPlaylistArtwork(playlist: string | undefined, apiKey: s
       headers: apiKey ? { "X-Goog-Api-Key": apiKey } : undefined,
       redirect: "error",
       signal: AbortSignal.timeout(3500),
-      next: { revalidate: 3600 },
+      cache: "no-store",
     });
     if (!response.ok) return null;
     const body: unknown = await response.json();
