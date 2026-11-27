@@ -39,12 +39,12 @@ function paintChart() {
   ink.strokeStyle = "#777b79";
   ink.lineWidth = 2;
   line(-radius, 0, radius, 0);
-  line(0, -radius, 0, -radius + 42);
+  line(0, -radius, 0, -radius + 14);
 
   // Grey steps and two spatial-frequency patches from an analogue test card.
   ["#848784", "#717572", "#616662", "#505552", "#414645", "#323737"].forEach((color, i) => {
     ink.fillStyle = color;
-    ink.fillRect(-110 + i * 37, -radius + 55, 37, 22);
+    ink.fillRect(-110 + i * 37, -radius + 22, 37, 22);
   });
   ink.fillStyle = "#91938c";
   for (const side of [-1, 1]) {
