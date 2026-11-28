@@ -30,6 +30,7 @@ export type Project = {
   demo?: { id: string; src: string; poster: string; description: string };
   gallery?: readonly { src: string; alt: string; caption: string; width: number; height: number }[];
   screenshot?: { src: string; alt: string; aspectRatio?: number };
+  technologies?: readonly { title: string; logo: string }[];
 };
 
 const rallyDashboard = {
@@ -52,6 +53,12 @@ export const projects: readonly Project[] = [{
     description: "A 25-second walkthrough of the scoring dashboard, teams, stations, questions, and standings.",
   },
   screenshot: rallyDashboard,
+  technologies: [
+    { title: "Next.js", logo: "/images/technologies/nextdotjs.svg" },
+    { title: "React", logo: "/images/technologies/react.svg" },
+    { title: "TypeScript", logo: "/images/technologies/typescript.svg" },
+    { title: "Tailwind CSS", logo: "/images/technologies/tailwindcss.svg" },
+  ],
   gallery: [
     rallyDashboard,
     {

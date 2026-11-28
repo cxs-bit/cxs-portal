@@ -12,6 +12,9 @@ import { ChannelArrival } from "./channel-arrival";
 import { VisitClock } from "./visit-clock";
 import { createRecordWall } from "./tv-record-wall";
 
+import type { WallPoster, WallPosterCatalog } from "@/lib/wall-posters";
+import { PosterWall, PosterInfo, useMusicPosters } from "./poster-wall";
+
 const motionQuery = "(prefers-reduced-motion: no-preference)";
 
 type Tuning = { id: ChannelId; roll?: { from: string; direction: "next" | "previous" } };
@@ -22,7 +25,7 @@ function subscribe(update: () => void) {
   return () => media.removeEventListener("change", update);
 }
 
-export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
+export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, ReactNode>; wallPosters: WallPosterCatalog }) {
   const pathname = usePathname();
   const router = useRouter();
   const available = channels.filter(item => panels[item.id]);
@@ -48,6 +51,25 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const [inIntro, setInIntro] = useState(false);
   const smoothScrolling = enabled && (pathname === "/" || inIntro);
   const [poweredOn, setPoweredOn] = useState(true);
+  const [wallOpen, setWallOpen] = useState(false);
+  const [posterId, setPosterId] = useState<string | null>(null);
+  const music = useMusicPosters(enabled && inIntro && selected.id === "personal");
+  const posters = selected.id === "personal" ? music.posters : wallPosters[selected.id];
+  const poster = poweredOn ? posters.find(item => item.id === posterId) : undefined;
+  const wallButton = useRef<HTMLButtonElement>(null);
+  const wallClose = useRef<HTMLButtonElement>(null);
+  const choosePosters = useRef<((items: readonly WallPoster[]) => void) | null>(null);
+  const updateInspection = useRef<(() => void) | null>(null);
+
+  function closeWall() {
+    setWallOpen(false);
+    setPosterId(null);
+    requestAnimationFrame(() => wallButton.current?.focus({ preventScroll: true }));
+  }
+
+  useLayoutEffect(() => {
+    if (wallOpen) wallClose.current?.focus({ preventScroll: true });
+  }, [wallOpen]);
   const stageRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
   const enterRef = useRef<HTMLButtonElement>(null);
@@ -74,11 +96,15 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   });
   const restoreRoute = useEffectEvent(() => {
     const item = available.find(channel => channel.href === location.pathname);
+    setWallOpen(false);
+    setPosterId(null);
     if (item) setTuned({ id: item.id });
     else initialTune();
   });
   function tune(direction: number) {
     if (!poweredOn || available.length < 2) return;
+    setPosterId(null);
+    setWallOpen(false);
     setTuned(current => {
       const index = Math.max(0, available.findIndex(item => item.id === current.id));
       const id = available[(index + direction + available.length) % available.length].id;
@@ -99,7 +125,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         anchors: true,
         smoothWheel: window.matchMedia("(pointer: fine)").matches,
         lerp: 0.085,
-        prevent: (node) => Boolean(node.closest(".search-overlay, .site-card-nav, select, textarea")),
+        prevent: (node) => Boolean(node.closest(".search-overlay, .site-card-nav, .poster-gallery, select, textarea")),
       });
       lenis.on("scroll", () => syncIntroRef.current?.());
       lenisRef.current = lenis;
@@ -122,7 +148,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     if (!stageRef.current || !logoRef.current) return;
     const stage = stageRef.current;
     const logo = logoRef.current;
-    const sceneElement = stage.parentElement!;
+    const sceneElement = stage.closest<HTMLElement>(".crt-intro-scene")!;
     const startup = window.cxsTvStartup;
     const skip = () => {
       const directChannel = channels.find(channel => channel.href === location.pathname);
@@ -190,6 +216,10 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       const cabinetHeight = bounds.max.y - bounds.min.y;
       const cabinet = gltf.scene.getObjectByName("Cube_TVCase_0");
       if (cabinet) cabinet.castShadow = true;
+      const pivot = new THREE.Group();
+      pivot.position.set(center.x, bounds.min.y, center.z);
+      scene.add(pivot);
+      pivot.attach(gltf.scene);
 
       const floor = new THREE.Mesh(
         new THREE.PlaneGeometry(cabinetHeight * 30, cabinetHeight * 30),
@@ -363,7 +393,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         camera.updateMatrixWorld();
         aperture.makeEmpty();
         for (const vertex of glass) {
-          target.copy(vertex).project(camera);
+          target.copy(vertex).sub(pivot.position).multiplyScalar(pivot.scale.x).add(pivot.position).project(camera);
           aperture.expandByPoint(pixel.set((1 + target.x) * width / 2, (1 - target.y) * height / 2));
         }
         // Keep the page at its responsive layout width. The cabinet clips the
@@ -379,6 +409,17 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         sceneElement.style.setProperty("--glass-width", `${screenWidth}px`);
         sceneElement.style.setProperty("--glass-height", `${screenHeight}px`);
         sceneElement.style.setProperty("--shutter-opacity", String(1 - THREE.MathUtils.smoothstep(progress, 0.10, 0.48)));
+        const browsing = sceneElement.dataset.wall === "true";
+        floor.visible = reflection.visible = shaft.visible = records.wall.visible = !browsing;
+        renderer.setClearAlpha(browsing ? 0 : 1);
+        if (browsing) {
+          const narrow = width < 760;
+          const previewScale = Math.min((narrow ? width * 0.83 : width * 0.32) / screenWidth,
+            (narrow ? height * 0.26 : height * 0.39) / screenHeight);
+          sceneElement.style.setProperty("--monitor-scale", String(previewScale));
+          sceneElement.style.setProperty("--monitor-x", `${(narrow ? 0.5 : 0.795) * width - (left + screenWidth / 2)}px`);
+          sceneElement.style.setProperty("--monitor-y", `${(narrow ? 0.79 : 0.55) * height - (top + screenHeight / 2)}px`);
+        }
         const power = powerRef.current;
         if (power) {
           const available = progress < 0.32;
@@ -410,20 +451,57 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         renderer.render(scene, camera);
       };
       let showing: boolean | undefined;
-      let loadingArtwork = false;
-      async function refreshArtwork() {
-        if (!showing || document.hidden || loadingArtwork || request.signal.aborted) return;
-        loadingArtwork = true;
-        try {
-          await records.load(request.signal, () => {
-            if (showing && !document.hidden) renderer.render(scene, camera);
-          });
-        } catch {
-          // Keep the current wall on a network failure. The next check retries.
-        } finally {
-          loadingArtwork = false;
-        }
+      const ray = new THREE.Raycaster();
+      function posterAt(event: MouseEvent, includeBackground = false) {
+        const area = stage.getBoundingClientRect();
+        ray.setFromCamera(pixel.set((event.clientX - area.left) / area.width * 2 - 1,
+          1 - (event.clientY - area.top) / area.height * 2), camera);
+        const hit = records.pick(ray);
+        const obstruction = hit || includeBackground ? ray.intersectObject(gltf.scene, true)[0] : undefined;
+        return { poster: hit && (!obstruction || hit.distance < obstruction.distance) ? hit.id : null,
+          wall: !obstruction && event.clientY < area.top + area.height * 0.74 };
       }
+      const canPick = () => showing && sceneElement.dataset.tuning === "true"
+        && sceneElement.dataset.powered === "true" && sceneElement.dataset.wall !== "true";
+      const onPoint = (e: PointerEvent) => {
+        if (!canPick() || e.pointerType !== "mouse") return;
+        const { poster } = posterAt(e);
+        stage.style.cursor = poster ? "pointer" : "";
+        setPosterId(poster);
+      };
+      const onLeave = (e: PointerEvent) => {
+        if (e.pointerType === "mouse") setPosterId(null);
+      };
+      const onPick = (e: MouseEvent) => {
+        if (!canPick()) return;
+        const hit = posterAt(e, true);
+        setPosterId(hit.poster);
+        if (!hit.poster && hit.wall) setWallOpen(true);
+      };
+      stage.addEventListener("pointermove", onPoint);
+      stage.addEventListener("pointerleave", onLeave);
+      stage.addEventListener("click", onPick);
+      choosePosters.current = items => {
+        void records.setPosters(items, request.signal, () => {
+          if (showing && !document.hidden) renderer.render(scene, camera);
+        });
+      };
+      let zoomFrame = 0;
+      updateInspection.current = () => {
+        cancelAnimationFrame(zoomFrame);
+        const from = pivot.scale.x;
+        const to = sceneElement.dataset.inspect === "true" && sceneElement.dataset.wall !== "true" ? 1.14 : 1;
+        const startTime = performance.now();
+        const animate = (now: number) => {
+          const t = from === to ? 1 : Math.min((now - startTime) / 230, 1);
+          pivot.scale.setScalar(THREE.MathUtils.lerp(from, to, THREE.MathUtils.smoothstep(t, 0, 1)));
+          pivot.updateMatrixWorld(true);
+          renderer.shadowMap.needsUpdate = true;
+          if (showing) scroll(true);
+          if (t < 1) zoomFrame = requestAnimationFrame(animate);
+        };
+        animate(startTime);
+      };
       let returning = false;
       let settling = false;
       let lastScrollY = -1;
@@ -511,7 +589,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
-          if (active) void refreshArtwork();
+          if (!active) { setWallOpen(false); setPosterId(null); }
           returning = backingOut;
           page.classList.toggle("crt-page-preview", active);
           page.inert = active;
@@ -566,7 +644,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
-      const artworkTimer = window.setInterval(refreshArtwork, 60_000);
       if (startOnPage) startup?.close();
       syncIntroRef.current = scroll;
       settleRef.current = settle;
@@ -607,7 +684,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       const onVisibilityChange = () => {
         if (!document.hidden) {
           scroll(true);
-          void refreshArtwork();
         }
       };
       document.addEventListener("visibilitychange", onVisibilityChange);
@@ -615,7 +691,11 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         history.scrollRestoration = previousRestoration;
         window.removeEventListener("popstate", onHistory);
         window.removeEventListener("resize", onResize);
-        window.clearInterval(artworkTimer);
+        choosePosters.current = updateInspection.current = null;
+        cancelAnimationFrame(zoomFrame);
+        stage.removeEventListener("pointermove", onPoint);
+        stage.removeEventListener("pointerleave", onLeave);
+        stage.removeEventListener("click", onPick);
         records.dispose();
         window.removeEventListener("scroll", onNativeScroll);
         document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -677,6 +757,14 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     syncIntroRef.current?.(true);
   }, [poweredOn, selected.name]);
 
+  useLayoutEffect(() => {
+    if (inIntro) choosePosters.current?.(posters);
+  }, [inIntro, posters]);
+
+  useLayoutEffect(() => {
+    if (inIntro) updateInspection.current?.();
+  }, [inIntro, wallOpen, poster?.id]);
+
   if (!displayed || (pathname !== "/" && !direct)) return null;
   return <>
     <ChannelArrival />
@@ -690,17 +778,19 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       aria-hidden={!inIntro}
       style={{ visibility: inIntro ? "visible" : "hidden" }}
       onKeyDown={(event) => {
-        if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        if (!wallOpen && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
           event.preventDefault();
           if (event.currentTarget.querySelector('[data-tuning="true"]')) tune(event.key === "ArrowRight" ? 1 : -1);
         } else if (event.key === "Escape") {
           event.preventDefault();
-          settleRef.current?.(0);
+          if (wallOpen) closeWall();
+          else if (posterId) setPosterId(null);
+          else settleRef.current?.(0);
         } else if (event.key === "Tab") {
           event.preventDefault();
           event.currentTarget.dataset.keyboardCue = "";
           const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), a:not([hidden])"))
-            .filter(control => control.getClientRects().length && getComputedStyle(control).visibility === "visible");
+            .filter(control => !control.closest("[inert]") && control.getClientRects().length && getComputedStyle(control).visibility === "visible");
           const current = controls.findIndex((control) => control === document.activeElement);
           const offset = event.shiftKey ? -1 : 1;
           controls[(current + offset + controls.length) % controls.length]?.focus({ preventScroll: true });
@@ -714,16 +804,22 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
           onBlur={event => { event.currentTarget.hidden = true; }}>
           Skip to portfolio
         </a>
-        <div className="crt-intro-scene" data-powered={poweredOn}>
-          <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
-            <div key={selected.id} className="crt-channel-roll" data-direction={tuned.roll?.direction}
-              onAnimationEnd={() => setTuned(current => current === tuned ? { id: current.id } : current)}>
-              {tuned.roll && <span className="crt-channel-outgoing">{tuned.roll.from}</span>}
-              <span>{selected.name}</span>
+        <div className="crt-intro-scene" data-powered={poweredOn} data-wall={wallOpen} data-inspect={Boolean(poster)}>
+          {wallOpen && <PosterWall channel={selected.name} posters={posters} selected={poster?.id ?? null}
+            emptyMessage={selected.id === "personal" ? music.status === "loading" ? "Loading playlist…" : "No playlist artwork available." : "No published posters yet."}
+            closeRef={wallClose} onClose={closeWall} onPreview={setPosterId} />}
+          <div className="crt-picture">
+            <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
+              <div key={selected.id} hidden={Boolean(poster)} className="crt-channel-roll" data-direction={tuned.roll?.direction}
+                onAnimationEnd={() => setTuned(current => current === tuned ? { id: current.id } : current)}>
+                {tuned.roll && <span className="crt-channel-outgoing">{tuned.roll.from}</span>}
+                <span>{selected.name}</span>
+              </div>
+              {poster && <PosterInfo poster={poster} />}
             </div>
+            <div className="crt-glass-shutter" aria-hidden="true" />
+            <div className="crt-intro-stage" ref={stageRef} aria-hidden="true" />
           </div>
-          <div className="crt-glass-shutter" aria-hidden="true" />
-          <div className="crt-intro-stage" ref={stageRef} aria-hidden="true" />
           <div className="tv-readouts">
             <span className="tv-status" data-on={poweredOn}>TV {poweredOn ? "ON" : "OFF"}</span>
             <span className="tv-channel-count">
@@ -733,30 +829,32 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
             {inIntro && <VisitClock />}
             <span className="tv-owner">Carlos Sosa</span>
           </div>
-          <span className="sr-only" role="status">{inIntro ? selected.name : ""}</span>
+          <span className="sr-only" role="status">{inIntro ? poster ? `${poster.title}. ${poster.description}` : selected.name : ""}</span>
           {available.length > 1 && ([-1, 1] as const).map(direction =>
             <button type="button" key={direction} className={direction < 0 ? "tv-arrow tv-prev" : "tv-arrow tv-next"}
               aria-label={direction < 0 ? "Previous channel" : "Next channel"}
-              disabled={!poweredOn} onClick={() => tune(direction)}>
+              disabled={!poweredOn || wallOpen} onClick={() => tune(direction)}>
               <HugeiconsIcon icon={direction < 0 ? ArrowLeft01Icon : ArrowRight01Icon} size={26} aria-hidden="true" />
             </button>
           )}
-          <div className="crt-power-area">
+          <div className="crt-power-area" inert={wallOpen}>
             <button
               ref={powerRef}
               className="crt-power"
               type="button"
               aria-pressed={poweredOn}
-              onClick={() => setPoweredOn((previous) => !previous)}
+              onClick={() => { setPosterId(null); setPoweredOn(previous => !previous); }}
             >
               <span className="crt-power-label">
                 <span className="crt-power-click">Click</span><span className="crt-power-tap">Tap</span> to turn <strong>ON/OFF</strong>
               </span>
             </button>
           </div>
-          <div className="crt-intro-controls">
+          <div className="crt-intro-controls" inert={wallOpen}>
             <p>Scroll to enter</p>
             <button ref={enterRef} type="button" onClick={() => settleRef.current?.(0.86)}>Enter {selected.name}</button>
+            <button type="button" ref={wallButton} className="explore-wall" disabled={!poweredOn}
+              onClick={() => { setPosterId(null); setWallOpen(true); }}>Explore wall</button>
           </div>
         </div>
     </div>, document.body,

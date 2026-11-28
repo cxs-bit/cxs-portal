@@ -14,7 +14,12 @@ describe("playlist artwork", () => {
   it("reads a single page and selects distinct thumbnails from verified hosts in playlist order", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({
       items: [
-        { snippet: { thumbnails: { high: { url: high }, default: { url: medium } } } },
+        { snippet: {
+          title: " First Track ",
+          videoOwnerChannelTitle: "First Artist",
+          channelTitle: "Playlist Owner",
+          thumbnails: { high: { url: high }, default: { url: medium } },
+        } },
         { snippet: { thumbnails: { high: { url: high } } } },
         { snippet: { thumbnails: { high: { url: "https://i.ytimg.com.example.org/art.jpg" }, medium: { url: medium } } } },
         { snippet: { thumbnails: { high: { url: "http://i.ytimg.com/art.jpg" } } } },
@@ -25,9 +30,15 @@ describe("playlist artwork", () => {
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getPlaylistArtwork(playlist, apiKey)).resolves.toEqual([high, medium]);
+    await expect(getPlaylistArtwork(playlist, apiKey)).resolves.toEqual({
+      covers: [high, medium],
+      posters: [
+        { id: `track:${high}`, title: "First Track", description: "First Artist", image: high, kind: "track" },
+        { id: `track:${medium}`, title: "YouTube track", description: "", image: medium, kind: "track" },
+      ],
+    });
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
-      new URL("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=PLExample&maxResults=50&fields=items%28snippet%28thumbnails%29%29"),
+      new URL("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=PLExample&maxResults=50&fields=items%28snippet%28thumbnails%2Ctitle%2CvideoOwnerChannelTitle%29%29"),
       {
         headers: { "X-Goog-Api-Key": apiKey },
         redirect: "error",
@@ -44,7 +55,9 @@ describe("playlist artwork", () => {
       })),
     })));
 
-    await expect(getPlaylistArtwork(playlist, apiKey)).resolves.toHaveLength(16);
+    const artwork = await getPlaylistArtwork(playlist, apiKey);
+    expect(artwork?.covers).toHaveLength(16);
+    expect(artwork?.posters.map((poster) => poster.image)).toEqual(artwork?.covers);
   });
 
   it("accepts additional thumbnail sizes and skips malformed items or sizes", async () => {
@@ -57,14 +70,27 @@ describe("playlist artwork", () => {
       ],
     })));
 
-    await expect(getPlaylistArtwork(playlist, apiKey)).resolves.toEqual([high, medium]);
+    await expect(getPlaylistArtwork(playlist, apiKey)).resolves.toMatchObject({ covers: [high, medium] });
   });
 
   it("uses the canonical playlist URL to retrieve one public thumbnail without an API key", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(Response.json({ thumbnail_url: high }));
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({
+      thumbnail_url: high,
+      title: "My Playlist",
+      author_name: "Playlist Owner",
+    }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(getPlaylistArtwork(playlist, undefined)).resolves.toEqual([high]);
+    await expect(getPlaylistArtwork(playlist, undefined)).resolves.toEqual({
+      covers: [high],
+      posters: [{
+        id: "playlist:PLExample",
+        title: "My Playlist",
+        description: "Playlist Owner",
+        image: high,
+        kind: "playlist",
+      }],
+    });
     expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
       new URL("https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fplaylist%3Flist%3DPLExample&format=json"),
       {

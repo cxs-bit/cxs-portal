@@ -715,3 +715,85 @@ html:has(#tv-startup[open]) { overflow: hidden; }
     left: max(1.25rem, 4vw, env(safe-area-inset-left)); transform: none;
   }
 }
+
+/* The same cabinet serves as the monitor beside the exposed wall. */
+.crt-picture {
+  position: absolute; inset: 0; z-index: 1;
+  transform-origin: calc(var(--glass-left) + var(--glass-width) / 2) calc(var(--glass-top) + var(--glass-height) / 2);
+  transition: transform 320ms ease-in-out, opacity 240ms ease-in-out;
+}
+.crt-intro-scene > :is(.tv-readouts, .crt-intro-controls, .crt-power-area, .tv-arrow) { z-index: 2; }
+.crt-intro-scene[data-wall="true"] > :is(.tv-readouts, .crt-intro-controls, .crt-power-area, .tv-arrow) { visibility: hidden; }
+.crt-intro-scene[data-wall="true"] .crt-picture {
+  opacity: 0; pointer-events: none;
+  transform: translate(var(--monitor-x, 0), var(--monitor-y, 0)) scale(calc(var(--monitor-scale, 1) * .86));
+}
+.crt-intro-scene[data-wall="true"][data-inspect="true"] .crt-picture {
+  opacity: 1;
+  transform: translate(var(--monitor-x), var(--monitor-y)) scale(var(--monitor-scale));
+}
+html:has(.crt-intro-scene[data-wall="true"]) { overflow: hidden; }
+.crt-intro-controls .explore-wall, .poster-gallery header button {
+  border: 1px solid #666b71; color: var(--ink); background: #191b1d;
+}
+.crt-intro-controls .explore-wall:hover:enabled, .poster-gallery header button:hover { background: #303439; }
+.crt-intro-controls .explore-wall:disabled { opacity: .45; }
+.crt-intro-scene[data-tuning="false"] .explore-wall { visibility: hidden; }
+.tv-poster-info {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+  padding: 9%; gap: 3cqw; overflow: hidden;
+  background: #0c1416; text-transform: none; text-shadow: none; color: #e8edee;
+}
+.tv-poster-info > span { color: #85c8f1; font: 600 clamp(.72rem, 3.6cqw, 1.1rem)/1 var(--mono); }
+.tv-poster-info strong { font-size: clamp(1.05rem, 7.4cqw, 2.6rem); line-height: 1.05; overflow-wrap: anywhere; }
+.tv-poster-info p { font: 500 clamp(.82rem, 4.2cqw, 1.4rem)/1.35 var(--font-sans), sans-serif; overflow-wrap: anywhere; }
+.poster-gallery {
+  position: absolute; inset: 0; background: #171819; color: var(--ink);
+  padding: max(1.4rem, env(safe-area-inset-top)) clamp(1.2rem, 4vw, 5rem) 1rem;
+  display: flex; flex-direction: column; overflow: hidden;
+  animation: wall-reveal 300ms ease-in-out both;
+}
+@keyframes wall-reveal { from { opacity: 0; } to { opacity: 1; } }
+.poster-gallery header { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-block-end: 1rem; }
+.poster-gallery h2 { font-size: clamp(1.35rem, 3vw, 2.8rem); line-height: 1.12; font-weight: 760; }
+.poster-gallery h2 span { color: #b6b9ba; font-weight: 450; }
+.poster-gallery header button { min-height: 44px; padding: .55rem .95rem; border-radius: .4rem; font-weight: 650; }
+.poster-wall-scroll { overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; flex: 1; min-height: 0; width: 63%; padding: .7rem; }
+.poster-wall-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(.65rem, 1.25vw, 1.2rem);
+  width: 100%; max-width: min(62vw, 88dvh); margin: 0; padding: 0; list-style: none;
+}
+.wall-print {
+  width: 100%; position: relative; display: grid; grid-template-rows: 1fr auto; text-align: left;
+  transform: rotate(-1deg); color: #202326; background: #ddd8ce; padding: .45rem;
+  box-shadow: 1px 3px 6px #09090980; transition: transform .18s ease;
+}
+.poster-wall-grid li:nth-child(3n+2) .wall-print { transform: rotate(1.4deg); }
+.poster-wall-grid .wall-print:is(:hover,:focus-visible,[aria-pressed="true"]) {
+  transform: rotate(0) translateY(-2px); outline: 2px solid #60b1ea; outline-offset: 3px;
+}
+.wall-print-image, .wall-print-initials { display: grid; place-items: center; aspect-ratio: 1; background-position: center; background-size: cover; background-repeat: no-repeat; }
+.wall-print[data-kind="project"] .wall-print-image { aspect-ratio: 1.6; background-color: #202124; background-size: contain; }
+.wall-print[data-kind="technology"] .wall-print-image { background-size: 55%; }
+.wall-print[data-kind="portrait"] .wall-print-image { background-size: contain; }
+.wall-print-initials { color: #c1d2d9; background-color: #25363e; font: 650 2.8rem/1 var(--mono); }
+.wall-print-title { display: block; font-size: clamp(.75rem, 1vw, .95rem); font-weight: 680; line-height: 1.15; padding: .5em .1em .1em; overflow-wrap: anywhere; }
+.wall-print:is([data-kind="track"],[data-kind="playlist"]) { padding: 0; background: #242729; color: var(--ink); }
+.wall-print:is([data-kind="track"],[data-kind="playlist"]) .wall-print-title { padding: .35em .48em; }
+.poster-wall-hint {
+  position: absolute; top: 51%; left: 69%; width: 23%; text-align: center;
+  font-size: clamp(1rem, 1.3vw, 1.35rem); line-height: 1.45; color: var(--muted-text);
+}
+.poster-wall-empty { color: var(--muted-text); }
+@media (max-width: 759px) {
+  .poster-wall-scroll { width: 100%; }
+  .poster-wall-hint { display: none; }
+  .poster-wall-grid { grid-template-columns: repeat(3,minmax(0,1fr)); max-width: none; }
+  .crt-intro-scene[data-inspect="true"] .poster-wall-scroll { margin-bottom: 36dvh; }
+  .crt-intro-controls { flex-wrap: wrap; gap: .55rem; }
+  .crt-intro-controls p { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .crt-picture, .wall-print { transition: none; }
+  .poster-gallery { animation: none; }
+}
