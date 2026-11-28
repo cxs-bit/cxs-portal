@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, type RefObject } from "react";
+import { useEffect, useState, type RefObject } from "react";
 import { posterStaggerMs, type WallPoster } from "@/lib/wall-posters";
 
 export function useMusicPosters(active: boolean) {
@@ -58,27 +58,26 @@ type GalleryProps = {
   closeRef: RefObject<HTMLButtonElement | null>;
   onClose: () => void;
   onPreview: (id: string | null) => void;
+  onOpen: (id: string, opener: HTMLButtonElement) => void;
 };
 
-export function PosterWall({ channel, posters, selected, emptyMessage, closeRef, onClose, onPreview }: GalleryProps) {
-  const touchSelection = useRef(false);
+export function PosterWall({ channel, posters, selected, emptyMessage, closeRef, onClose, onPreview, onOpen }: GalleryProps) {
   return <section className="poster-gallery" aria-label={channel + " poster wall"} data-lenis-prevent>
     <header>
       <h2>{channel} <span>poster wall</span></h2>
       <button ref={closeRef} type="button" onClick={onClose}>Back to TV</button>
     </header>
-    {posters.length > 0 && !selected && <p className="poster-wall-hint">Choose a poster to see its details on the TV.</p>}
+    {posters.length > 0 && !selected && <p className="poster-wall-hint">Select a poster to open it full screen.</p>}
     <div className="poster-wall-scroll" data-lenis-prevent>
       {posters.length ? <ul className="poster-wall-grid">
         {posters.map((poster, index) => <li key={poster.id} style={{ animationDelay: `${index * posterStaggerMs}ms` }}>
           <button type="button" aria-label={poster.title} aria-pressed={poster.id === selected}
             className="wall-print" data-kind={poster.kind}
-            onPointerDown={e => { touchSelection.current = e.pointerType === "touch"; }}
             onPointerEnter={e => { if (e.pointerType === "mouse") onPreview(poster.id); }}
             onPointerLeave={e => { if (e.pointerType === "mouse" && !e.currentTarget.matches(":focus-visible")) onPreview(null); }}
             onFocus={e => { if (e.currentTarget.matches(":focus-visible")) onPreview(poster.id); }}
             onBlur={() => onPreview(null)}
-            onClick={e => onPreview(e.detail && touchSelection.current && selected === poster.id ? null : poster.id)}>
+            onClick={e => onOpen(poster.id, e.currentTarget)}>
             {poster.image ? <span className="wall-print-image" style={{backgroundImage: `url("${encodeURI(poster.image).replaceAll('"', '%22')}")`}} />
               : <span className="wall-print-initials" aria-hidden="true">{poster.title.split(/\s+/).slice(0, 2).map(word => word[0]).join("")}</span>}
             <span className="wall-print-title">{poster.title}</span>

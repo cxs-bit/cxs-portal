@@ -13,6 +13,7 @@ import { VisitClock } from "./visit-clock";
 import { createRecordWall } from "./tv-record-wall";
 
 import type { WallPoster, WallPosterCatalog } from "@/lib/wall-posters";
+import { PosterViewer } from "./poster-viewer";
 import { PosterWall, PosterInfo, useMusicPosters } from "./poster-wall";
 
 const motionQuery = "(prefers-reduced-motion: no-preference)";
@@ -53,6 +54,8 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   const [poweredOn, setPoweredOn] = useState(true);
   const [wallOpen, setWallOpen] = useState(false);
   const [posterId, setPosterId] = useState<string | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const viewerOpener = useRef<HTMLButtonElement | null>(null);
   const music = useMusicPosters(enabled && inIntro && selected.id === "personal");
   const posters = selected.id === "personal" ? music.posters : wallPosters[selected.id];
   const poster = poweredOn ? posters.find(item => item.id === posterId) : undefined;
@@ -61,7 +64,20 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   const choosePosters = useRef<((items: readonly WallPoster[]) => void) | null>(null);
   const updateInspection = useRef<(() => void) | null>(null);
 
+  function openViewer(id: string, opener: HTMLButtonElement | null) {
+    viewerOpener.current = opener;
+    setViewerId(id);
+    setPosterId(null);
+  }
+
+  function closeViewer() {
+    setViewerId(null);
+    const opener = viewerOpener.current;
+    (opener?.isConnected ? opener : wallOpen ? wallClose.current : wallButton.current)?.focus({ preventScroll: true });
+  }
+
   function closeWall() {
+    setViewerId(null);
     setWallOpen(false);
     setPosterId(null);
     requestAnimationFrame(() => wallButton.current?.focus({ preventScroll: true }));
@@ -96,6 +112,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   });
   const restoreRoute = useEffectEvent(() => {
     const item = available.find(channel => channel.href === location.pathname);
+    setViewerId(null);
     setWallOpen(false);
     setPosterId(null);
     if (item) setTuned({ id: item.id });
@@ -104,6 +121,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   function tune(direction: number) {
     if (!poweredOn || available.length < 2) return;
     setPosterId(null);
+    setViewerId(null);
     setWallOpen(false);
     setTuned(current => {
       const index = Math.max(0, available.findIndex(item => item.id === current.id));
@@ -475,8 +493,8 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
       const onPick = (e: MouseEvent) => {
         if (!canPick()) return;
         const hit = posterAt(e, true);
-        setPosterId(hit.poster);
-        if (!hit.poster && hit.wall) setWallOpen(true);
+        if (hit.poster) openViewer(hit.poster, wallButton.current);
+        else if (hit.wall) { setPosterId(null); setWallOpen(true); }
       };
       stage.addEventListener("pointermove", onPoint);
       stage.addEventListener("pointerleave", onLeave);
@@ -589,7 +607,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
-          if (!active) { setWallOpen(false); setPosterId(null); }
+          if (!active) { setViewerId(null); setWallOpen(false); setPosterId(null); }
           returning = backingOut;
           page.classList.toggle("crt-page-preview", active);
           page.inert = active;
@@ -765,6 +783,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
     if (inIntro) updateInspection.current?.();
   }, [inIntro, wallOpen, poster?.id]);
 
+  const viewerIndex = viewerId === null ? -1 : posters.findIndex(item => item.id === viewerId);
   if (!displayed || (pathname !== "/" && !direct)) return null;
   return <>
     <ChannelArrival />
@@ -805,9 +824,11 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
           Skip to portfolio
         </a>
         <div className="crt-intro-scene" data-powered={poweredOn} data-wall={wallOpen} data-inspect={Boolean(poster)}>
+          {inIntro && viewerId !== null && posters.length > 0 && <PosterViewer channel={selected.name} posters={posters}
+            index={Math.max(0, viewerIndex)} onSelect={setViewerId} onClose={closeViewer} />}
           {wallOpen && <PosterWall channel={selected.name} posters={posters} selected={poster?.id ?? null}
             emptyMessage={selected.id === "personal" ? music.status === "loading" ? "Loading playlist…" : "No playlist artwork available." : "No published posters yet."}
-            closeRef={wallClose} onClose={closeWall} onPreview={setPosterId} />}
+            closeRef={wallClose} onClose={closeWall} onPreview={setPosterId} onOpen={openViewer} />}
           <div className="crt-picture">
             <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
               <div key={selected.id} hidden={Boolean(poster)} className="crt-channel-roll" data-direction={tuned.roll?.direction}
