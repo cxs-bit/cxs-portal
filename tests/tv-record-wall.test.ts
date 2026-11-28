@@ -5,7 +5,7 @@ import type { WallPoster } from "../src/lib/wall-posters";
 
 afterEach(() => vi.unstubAllGlobals());
 
-function setup() {
+function setup(motionAllowed = false) {
   const drawImage = vi.fn();
   vi.stubGlobal("document", {
     createElement: () => {
@@ -26,7 +26,7 @@ function setup() {
   }));
   const fetchArtwork = vi.fn(async (url: string) => new Response(url));
   vi.stubGlobal("fetch", fetchArtwork);
-  const records = createRecordWall(THREE);
+  const records = createRecordWall(THREE, motionAllowed);
   const redraw = vi.fn();
   const show = (posters: WallPoster[], signal = new AbortController().signal) =>
     records.setPosters(posters, signal, redraw);
@@ -119,4 +119,59 @@ it("loads local technology artwork when the bitmap decoder rejects SVG", async (
   expect(decode).toHaveBeenCalledOnce();
   expect(drawImage).toHaveBeenCalledOnce();
   records.dispose();
+});
+
+it("staggers entry, keeps refreshes steady, and reverses interrupted channel fades", async () => {
+  let frame: FrameRequestCallback | undefined;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    expect(frame).toBeUndefined();
+    frame = callback;
+    return 1;
+  });
+  const cancel = vi.fn(() => { frame = undefined; });
+  vi.stubGlobal("cancelAnimationFrame", cancel);
+  function advance(now: number) {
+    const callback = frame!;
+    frame = undefined;
+    callback(now);
+  }
+
+  const { records, show } = setup(true);
+  const tracks = ["one", "two", "three"].map(id => poster(id));
+  await show(tracks);
+  const [first, second, third] = records.wall.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
+  expect(first.material.opacity).toBe(0);
+  advance(0);
+  advance(20);
+  expect(first.material.opacity).toBeGreaterThan(0);
+  expect(second.material.opacity).toBe(0);
+  advance(45);
+  expect(second.material.opacity).toBeGreaterThan(0);
+  expect(third.material.opacity).toBe(0);
+  await show(tracks.map(track => ({ ...track })));
+  advance(360);
+  expect(third.material.opacity).toBe(1);
+  expect(frame).toBeUndefined();
+
+  await show([poster("portrait", undefined, "portrait")]);
+  const position = first.position.clone().add(new THREE.Vector3(0, 0, 5));
+  expect(records.pick(new THREE.Raycaster(position, new THREE.Vector3(0, 0, -1)))).toBeNull();
+  advance(400);
+  advance(460);
+  const halfway = first.material.opacity;
+  expect(halfway).toBeGreaterThan(0);
+  expect(halfway).toBeLessThan(second.material.opacity);
+  await show(tracks);
+  advance(470);
+  expect(first.material.opacity).toBe(halfway);
+  advance(520);
+  expect(first.material.opacity).toBeGreaterThan(halfway);
+  advance(900);
+  expect(records.wall.children).toEqual([first, second, third]);
+  expect(frame).toBeUndefined();
+
+  await show([]);
+  records.dispose();
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(frame).toBeUndefined();
 });
