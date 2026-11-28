@@ -768,6 +768,10 @@ html:has(.crt-intro-scene[data-wall="true"]) { overflow: hidden; }
   transform: rotate(-1deg); color: #202326; background: #ddd8ce; padding: .45rem;
   box-shadow: 1px 3px 6px #09090980; transition: transform .18s ease;
 }
+@media (prefers-reduced-motion: no-preference) {
+  .poster-wall-grid > li { animation: wall-reveal 300ms ease-in-out backwards; }
+  .poster-wall-grid > li:focus-within { opacity: 1 !important; }
+}
 .poster-wall-grid li:nth-child(3n+2) .wall-print { transform: rotate(1.4deg); }
 .poster-wall-grid .wall-print:is(:hover,:focus-visible,[aria-pressed="true"]) {
   transform: rotate(0) translateY(-2px); outline: 2px solid #60b1ea; outline-offset: 3px;

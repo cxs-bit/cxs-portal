@@ -1,5 +1,5 @@
 import type * as Three from "three";
-import type { WallPoster } from "@/lib/wall-posters";
+import { posterStaggerMs, type WallPoster } from "../lib/wall-posters";
 
 // Positions are in sleeve widths, measured up from the floor.
 const sleeves = [
@@ -134,10 +134,16 @@ function drawArtwork(ink: CanvasRenderingContext2D, poster: WallPoster, image: A
   ink.drawImage(image.source, (width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight);
 }
 
-export function createRecordWall(THREE: typeof Three) {
+type WallMesh = PosterMesh["mesh"];
+type PosterFade = { from: number; to: 0 | 1; delay: number; start?: number };
+
+export function createRecordWall(THREE: typeof Three, motionAllowed: boolean) {
   const wall = new THREE.Group();
   const geometry = new THREE.PlaneGeometry(1, 1);
   const cache = new Map<string, PosterMesh>();
+  const fades = new Map<WallMesh, PosterFade>();
+  let selectable: WallMesh[] = [];
+  let fadeFrame: number | undefined;
   let disposed = false;
   let revision = 0;
   let artworkChanged = false;
@@ -194,13 +200,60 @@ export function createRecordWall(THREE: typeof Three) {
     entry.texture.dispose();
   }
 
+  function trimCache() {
+    for (const [key, entry] of cache) {
+      if (cache.size <= sleeves.length * 2) break;
+      if (!entry.mesh.parent) {
+        release(entry);
+        cache.delete(key);
+      }
+    }
+  }
+
+  function fade(mesh: WallMesh, to: 0 | 1, index: number) {
+    const material = mesh.material;
+    if (!motionAllowed || material.opacity === to) {
+      fades.delete(mesh);
+      material.opacity = to;
+      material.transparent = false;
+      material.depthWrite = true;
+      if (to === 0) wall.remove(mesh);
+      return;
+    }
+    material.transparent = true;
+    material.depthWrite = false;
+    fades.set(mesh, { from: material.opacity, to, delay: index * posterStaggerMs / (to ? 1 : 2) });
+  }
+
+  function playFades(redraw: () => void) {
+    if (!fades.size || fadeFrame !== undefined) return;
+    function tick(now: number) {
+      fadeFrame = undefined;
+      for (const [mesh, transition] of fades) {
+        transition.start ??= now + transition.delay;
+        const progress = THREE.MathUtils.smoothstep(now - transition.start, 0, transition.to ? 300 : 150);
+        mesh.material.opacity = THREE.MathUtils.lerp(transition.from, transition.to, progress);
+        if (progress === 1) {
+          fades.delete(mesh);
+          mesh.material.transparent = false;
+          mesh.material.depthWrite = true;
+          if (transition.to === 0) wall.remove(mesh);
+        }
+      }
+      redraw();
+      if (fades.size) fadeFrame = requestAnimationFrame(tick);
+      else trimCache();
+    }
+    fadeFrame = requestAnimationFrame(tick);
+  }
+
   async function setPosters(posters: readonly WallPoster[], signal: AbortSignal, redraw: () => void) {
     if (disposed || signal.aborted) return;
     const current = ++revision;
     const visible = posters.slice(0, sleeves.length);
     const records = visible.every(isSleeve);
-    const previous = [...wall.children];
-    const mounted = new Set<Three.Object3D>();
+    const previous = selectable;
+    const mounted = new Set<WallMesh>();
     let changed = false;
     const loads = visible.map((poster, index) => {
       const key = `${poster.kind}:${poster.id}`;
@@ -226,9 +279,12 @@ export function createRecordWall(THREE: typeof Three) {
       const width = poster.kind === "project" ? 1.58 : poster.kind === "portrait" ? 1.24 : 1;
       const rotation = THREE.MathUtils.degToRad(angle);
       if (mesh.parent !== wall) {
+        mesh.material.opacity = 0;
         wall.add(mesh);
+        fade(mesh, 1, index);
         changed = true;
       }
+      if (fades.get(mesh)?.to === 0) fade(mesh, 1, index);
       const z = index * 0.002;
       if (mesh.position.x !== x || mesh.position.y !== y || mesh.position.z !== z || mesh.rotation.z !== rotation) {
         mesh.position.set(x, y, z);
@@ -242,20 +298,18 @@ export function createRecordWall(THREE: typeof Three) {
       if (poster.image) return loadPoster(entry, poster.image, signal);
     });
 
-    for (const mesh of previous) {
+    selectable = [...mounted];
+    previous.forEach((mesh, index) => {
       if (!mounted.has(mesh)) {
-        wall.remove(mesh);
+        fade(mesh, 0, index);
         changed = true;
       }
+    });
+    for (const entry of cache.values()) {
+      if (!mounted.has(entry.mesh)) entry.request?.controller.abort();
     }
-    for (const [key, entry] of cache) {
-      if (mounted.has(entry.mesh)) continue;
-      entry.request?.controller.abort();
-      if (cache.size > sleeves.length * 2) {
-        release(entry);
-        cache.delete(key);
-      }
-    }
+    trimCache();
+    playFades(redraw);
     if (changed || artworkChanged) {
       artworkChanged = false;
       redraw();
@@ -269,12 +323,15 @@ export function createRecordWall(THREE: typeof Three) {
 
   function pick(ray: Three.Raycaster) {
     wall.updateWorldMatrix(true, true);
-    const hit = ray.intersectObjects(wall.children, false)[0];
+    const hit = ray.intersectObjects<WallMesh>(selectable, false).find(({object}) => object.material.opacity > 0);
     return hit ? { id: hit.object.userData.posterId as string, distance: hit.distance } : null;
   }
 
   function dispose() {
     disposed = true;
+    if (fadeFrame !== undefined) cancelAnimationFrame(fadeFrame);
+    fades.clear();
+    selectable = [];
     wall.clear();
     cache.forEach(release);
     cache.clear();

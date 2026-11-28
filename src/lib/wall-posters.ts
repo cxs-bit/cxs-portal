@@ -1,3 +1,5 @@
+export const posterStaggerMs = 28;
+
 export type WallPoster = {
   id: string;
   title: string;

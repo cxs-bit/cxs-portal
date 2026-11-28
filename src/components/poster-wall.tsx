@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, type RefObject } from "react";
-import type { WallPoster } from "@/lib/wall-posters";
+import { posterStaggerMs, type WallPoster } from "@/lib/wall-posters";
 
 export function useMusicPosters(active: boolean) {
   const [posters, setPosters] = useState<WallPoster[]>([]);
@@ -70,7 +70,7 @@ export function PosterWall({ channel, posters, selected, emptyMessage, closeRef,
     {posters.length > 0 && !selected && <p className="poster-wall-hint">Choose a poster to see its details on the TV.</p>}
     <div className="poster-wall-scroll" data-lenis-prevent>
       {posters.length ? <ul className="poster-wall-grid">
-        {posters.map(poster => <li key={poster.id}>
+        {posters.map((poster, index) => <li key={poster.id} style={{ animationDelay: `${index * posterStaggerMs}ms` }}>
           <button type="button" aria-label={poster.title} aria-pressed={poster.id === selected}
             className="wall-print" data-kind={poster.kind}
             onPointerDown={e => { touchSelection.current = e.pointerType === "touch"; }}

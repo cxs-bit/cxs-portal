@@ -310,7 +310,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
       shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
       scene.add(shaft);
       initialTune();
-      const records = createRecordWall(THREE);
+      const records = createRecordWall(THREE, window.matchMedia(motionQuery).matches);
       scene.add(records.wall);
       // Trace a reflected viewing ray to the tube and soften its footprint on the floor.
       const reflection = new THREE.Mesh(
