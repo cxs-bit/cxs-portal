@@ -62,6 +62,15 @@ when a photo, caption, and alt text are supplied. Use the shared URL of a
 public or unlisted YouTube Music playlist. The player follows the playlist order
 and provides a direct link for tracks that restrict embedded playback.
 
+The homepage TV wall uses YouTube's public oEmbed response for one thumbnail
+from this playlist. To show thumbnails from multiple tracks, enable
+the [YouTube Data API v3](https://developers.google.com/youtube/v3/getting-started)
+in a Google Cloud project, create a key restricted to that API, and set
+`YOUTUBE_DATA_API_KEY` in `.env.local` and the corresponding Vercel environments.
+The visible TV room checks the playlist once a minute and when you return to its tab.
+Vercel shares successful playlist lookups for 30 seconds. The wall downloads only
+changed sleeves and uses its built-in artwork for empty slots.
+
 Stage drafts in the Git-ignored `content/channels/private/` directory using
 the same filenames. Sign in at `/preview` with the owner account and open the
 shop. Store draft files under `private/work/` or `private/personal/` and link

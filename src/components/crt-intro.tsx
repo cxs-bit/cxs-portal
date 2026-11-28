@@ -10,7 +10,7 @@ import { channels, type ChannelId } from "@/lib/channel-catalog";
 import { rememberChannelVisit, tvSessionKey } from "@/lib/tv-session";
 import { ChannelArrival } from "./channel-arrival";
 import { VisitClock } from "./visit-clock";
-import { createWallTitle } from "./tv-wall-title";
+import { createRecordWall } from "./tv-record-wall";
 
 const motionQuery = "(prefers-reduced-motion: no-preference)";
 
@@ -33,7 +33,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const selected = available.find(item => item.id === tuned.id) ?? available[0];
   const position = available.indexOf(selected) + 1;
   const displayed = shopSession ? selected : direct;
-  const wallRef = useRef<((label: string) => void) | null>(null);
 
   const motionAllowed = useSyncExternalStore(subscribe, () => window.matchMedia(motionQuery).matches, () => false);
   const [unavailable, setUnavailable] = useState(false);
@@ -73,7 +72,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
   const reopen = useEffectEvent(() => {
     if (location.pathname !== "/") history.back();
   });
-  const initialLabel = useEffectEvent(() => selected.name);
   const restoreRoute = useEffectEvent(() => {
     const item = available.find(channel => channel.href === location.pathname);
     if (item) setTuned({ id: item.id });
@@ -227,7 +225,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
             signalTint: { value: new THREE.Color(0x263438) },
             leftLight: { value: new THREE.Color(0x6b94a9) },
             rightLight: { value: new THREE.Color(0x738b82) },
-            lightTime: { value: 0 },
             lightLevel: { value: 1 },
             powered: { value: 1 },
           },
@@ -244,7 +241,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
             uniform vec3 signalTint;
             uniform vec3 leftLight;
             uniform vec3 rightLight;
-            uniform float lightTime;
             uniform float lightLevel;
             uniform float powered;
             varying vec2 vUv;
@@ -263,10 +259,8 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
               float alpha = lampGlow + wallAlpha * (1.0 - lampGlow);
               vec3 color = wallColor * wallAlpha * (1.0 - lampGlow) + tint * lampGlow;
 
-              vec2 left = (vUv - vec2(0.24 + 0.065 * sin(lightTime * 0.43),
-                0.61 + 0.12 * cos(lightTime * 0.36))) * vec2(6.5, 4.2);
-              vec2 right = (vUv - vec2(0.76 + 0.06 * sin(lightTime * 0.34 + 2.1),
-                0.47 + 0.10 * cos(lightTime * 0.41 + 2.1))) * vec2(6.0, 4.6);
+              vec2 left = (vUv - vec2(0.24, 0.73)) * vec2(6.5, 4.2);
+              vec2 right = (vUv - vec2(0.81, 0.42)) * vec2(6.0, 4.6);
               float leftGlow = 0.24 * wallEdge * lightLevel * exp(-dot(left, left));
               float rightGlow = 0.20 * wallEdge * lightLevel * exp(-dot(right, right));
               color = color * (1.0 - leftGlow) + leftLight * leftGlow;
@@ -285,15 +279,9 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       shaft.position.y = floor.position.y + cabinetHeight * 1.25;
       shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
       scene.add(shaft);
-      const wallTitle = createWallTitle(THREE);
-      scene.add(wallTitle.mesh);
-      wallRef.current = wallTitle.write;
-      wallTitle.write(initialLabel());
-      void document.fonts.ready.then(() => {
-        if (cancelled) return;
-        wallTitle.write(initialLabel());
-        syncIntroRef.current?.(true);
-      });
+      initialTune();
+      const records = createRecordWall(THREE);
+      scene.add(records.wall);
       // Trace a reflected viewing ray to the tube and soften its footprint on the floor.
       const reflection = new THREE.Mesh(
         new THREE.PlaneGeometry(cabinetHeight * 10, cabinetHeight * 10),
@@ -373,8 +361,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         camera.position.lerpVectors(start, end, cameraProgress);
         camera.lookAt(target.copy(startLook).lerp(screenCenter, cameraProgress));
         camera.updateMatrixWorld();
-        const wallDepth = -target.copy(center).applyMatrix4(camera.matrixWorldInverse).z + cabinetHeight;
-        wallTitle.align(camera, wallDepth);
         aperture.makeEmpty();
         for (const vertex of glass) {
           target.copy(vertex).project(camera);
@@ -421,31 +407,23 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         reflection.material.uniforms.strength.value = signal;
         shaft.material.uniforms.powered.value = signal;
         shaft.material.uniforms.lightLevel.value = 1 - THREE.MathUtils.smoothstep(progress, 0.08, 0.35);
-        if (wallFrame === undefined || !powered) renderer.render(scene, camera);
-      };
-      let wallFrame: number | undefined;
-      let lastWallTime = 0;
-      function stopWallAnimation() {
-        if (wallFrame !== undefined) cancelAnimationFrame(wallFrame);
-        wallFrame = undefined;
-      }
-      function animateWall(now: number) {
-        const seconds = Math.min(Math.max(0, now - lastWallTime), 100) / 1000;
-        lastWallTime = now;
-        wallTitle.advance(seconds);
-        shaft.material.uniforms.lightTime.value += seconds;
         renderer.render(scene, camera);
-        wallFrame = requestAnimationFrame(animateWall);
-      }
-      function syncWallAnimation() {
-        if (document.hidden || !showing || sceneElement.dataset.powered === "false") {
-          stopWallAnimation();
-        } else if (wallFrame === undefined) {
-          lastWallTime = performance.now();
-          wallFrame = requestAnimationFrame(animateWall);
+      };
+      let showing: boolean | undefined;
+      let loadingArtwork = false;
+      async function refreshArtwork() {
+        if (!showing || document.hidden || loadingArtwork || request.signal.aborted) return;
+        loadingArtwork = true;
+        try {
+          await records.load(request.signal, () => {
+            if (showing && !document.hidden) renderer.render(scene, camera);
+          });
+        } catch {
+          // Keep the current wall on a network failure. The next check retries.
+        } finally {
+          loadingArtwork = false;
         }
       }
-      let showing: boolean | undefined;
       let returning = false;
       let settling = false;
       let lastScrollY = -1;
@@ -533,6 +511,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
+          if (active) void refreshArtwork();
           returning = backingOut;
           page.classList.toggle("crt-page-preview", active);
           page.inert = active;
@@ -553,7 +532,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
           }
         }
         if (active) render(scrollY, THREE.MathUtils.clamp(scrollY / (returning ? returnStart() : entry), 0, 1));
-        syncWallAnimation();
       }
       const onNativeScroll = () => scroll();
       const resize = () => {
@@ -562,8 +540,14 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         renderer.setSize(width, height);
         camera.aspect = width / height;
         camera.fov = width < 700 ? 52 : 35;
-        const startDistance = distance * Math.max(1.24, 0.65 / camera.aspect);
+        const startDistance = distance * Math.max(1.34, 0.68 / camera.aspect);
         start.copy(center).addScaledVector(normal, startDistance).add(new THREE.Vector3(-distance * 0.38, distance * 0.04, 0));
+        // Anchor the sleeves to the back wall at the floor line during the zoom.
+        const wallNormal = start.clone().sub(center).setY(0).normalize();
+        records.wall.position.copy(center).addScaledVector(wallNormal, -cabinetHeight * 0.82);
+        records.wall.position.y = floor.position.y + cabinetHeight * 0.01;
+        records.wall.rotation.y = Math.atan2(wallNormal.x, wallNormal.z);
+        records.wall.scale.setScalar(cabinetHeight * (width < 700 ? 0.54 : 0.49));
         // Stop when the glass fills both axes. Traveling farther leaves the
         // visitor scrolling over a full-size page whose links are still inert.
         const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
@@ -573,7 +557,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
         entry = Math.round(height * 0.78);
         page.style.marginTop = `${entry}px`;
       };
-      initialTune();
       const startOnPage = Boolean(
         window.location.hash || (!document.getElementById("tv-startup")?.hasAttribute("open") &&
           (window.scrollY || page.contains(document.activeElement) || page.querySelector('.nav-search[aria-expanded="true"]'))),
@@ -583,6 +566,7 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       if (startOnPage) window.scrollTo({ top: initialScroll + entry, behavior: "instant" });
       lenisRef.current?.resize();
       scroll();
+      const artworkTimer = window.setInterval(refreshArtwork, 60_000);
       if (startOnPage) startup?.close();
       syncIntroRef.current = scroll;
       settleRef.current = settle;
@@ -620,16 +604,21 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
       window.addEventListener("popstate", onHistory);
       window.addEventListener("resize", onResize);
       window.addEventListener("scroll", onNativeScroll, { passive: true });
-      document.addEventListener("visibilitychange", syncWallAnimation);
+      const onVisibilityChange = () => {
+        if (!document.hidden) {
+          scroll(true);
+          void refreshArtwork();
+        }
+      };
+      document.addEventListener("visibilitychange", onVisibilityChange);
       dispose = () => {
         history.scrollRestoration = previousRestoration;
         window.removeEventListener("popstate", onHistory);
         window.removeEventListener("resize", onResize);
-        wallTitle.dispose();
-        wallRef.current = null;
+        window.clearInterval(artworkTimer);
+        records.dispose();
         window.removeEventListener("scroll", onNativeScroll);
-        document.removeEventListener("visibilitychange", syncWallAnimation);
-        stopWallAnimation();
+        document.removeEventListener("visibilitychange", onVisibilityChange);
         syncIntroRef.current = null;
         settleRef.current = null;
         clearEdge();
@@ -683,10 +672,6 @@ export function CrtIntro({ panels }: { panels: Record<ChannelId, ReactNode> }) {
     if (window.cxsTvStartup) window.cxsTvStartup.ready(focusControls);
     else focusControls(false);
   }, [enabled, inIntro]);
-
-  useEffect(() => {
-    wallRef.current?.(selected.name);
-  }, [selected.name]);
 
   useEffect(() => {
     syncIntroRef.current?.(true);
