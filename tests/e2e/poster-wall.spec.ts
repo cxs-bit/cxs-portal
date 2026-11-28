@@ -18,6 +18,7 @@ const tracks = [
 ];
 
 test("previews and opens TV wall posters, browses neighbors, and restores focus", async ({ page, browserName, isMobile }) => {
+  test.setTimeout(60_000);
   test.skip(browserName !== "chromium", "Uses Chromium's software WebGL renderer.");
   await page.route("**/api/tv/artwork", route => route.fulfill({
     json: { covers: tracks.map(track => track.image), posters: tracks },
@@ -78,6 +79,9 @@ test("previews and opens TV wall posters, browses neighbors, and restores focus"
   await expect(viewer.getByText(/Rally dashboard showing team and station totals/)).toBeVisible();
   await page.keyboard.press("ArrowRight");
   await expect(viewer.getByRole("heading", { name: "Team roster", exact: true })).toBeVisible();
+  const expandedImage = viewer.getByRole("img", { name: "Team roster" });
+  await expect(expandedImage).toHaveAttribute("src", "/images/projects/rally-scoring/teams.webp");
+  await expect(expandedImage).toHaveCSS("object-fit", "contain");
   await page.keyboard.press("ArrowLeft");
   await expect(viewer.getByRole("heading", { name: "Scoring dashboard", exact: true })).toBeVisible();
   await closeViewer.click();

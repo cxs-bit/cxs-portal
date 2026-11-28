@@ -481,24 +481,44 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
       }
       const canPick = () => showing && sceneElement.dataset.tuning === "true"
         && sceneElement.dataset.powered === "true" && sceneElement.dataset.wall !== "true";
+      let hoverPoint: { id: string; x: number; y: number } | null = null;
+      // The cabinet can grow over the pointer while a poster is being previewed.
+      // Keep the original target until the visitor actually moves away.
+      const heldPoster = (e: MouseEvent) => hoverPoint && sceneElement.dataset.inspect === "true"
+        && Math.hypot(e.clientX - hoverPoint.x, e.clientY - hoverPoint.y) <= 4 ? hoverPoint.id : null;
+      const clearHover = () => {
+        hoverPoint = null;
+        stage.style.cursor = "";
+        setPosterId(null);
+      };
       const onPoint = (e: PointerEvent) => {
         if (!canPick() || e.pointerType !== "mouse") return;
-        const { poster } = posterAt(e);
+        const target = e.target as Element;
+        if (target.closest(".crt-intro-stage, .crt-power") && heldPoster(e)) return;
+        const poster = stage.contains(target) ? posterAt(e).poster : null;
+        hoverPoint = poster ? { id: poster, x: e.clientX, y: e.clientY } : null;
         stage.style.cursor = poster ? "pointer" : "";
         setPosterId(poster);
       };
       const onLeave = (e: PointerEvent) => {
-        if (e.pointerType === "mouse") setPosterId(null);
+        if (e.pointerType === "mouse" && canPick()) clearHover();
       };
       const onPick = (e: MouseEvent) => {
-        if (!canPick()) return;
-        const hit = posterAt(e, true);
-        if (hit.poster) openViewer(hit.poster, wallButton.current);
-        else if (hit.wall) { setPosterId(null); setWallOpen(true); }
+        if (!canPick() || !e.detail) return;
+        const target = e.target as Element;
+        if (!target.closest(".crt-intro-stage, .crt-power")) return;
+        const held = heldPoster(e);
+        if (!held && !stage.contains(target)) return;
+        const hit = held ? { poster: held, wall: false } : posterAt(e, true);
+        clearHover();
+        if (hit.poster) {
+          e.stopPropagation();
+          openViewer(hit.poster, wallButton.current);
+        } else if (hit.wall) setWallOpen(true);
       };
-      stage.addEventListener("pointermove", onPoint);
-      stage.addEventListener("pointerleave", onLeave);
-      stage.addEventListener("click", onPick);
+      sceneElement.addEventListener("pointermove", onPoint);
+      sceneElement.addEventListener("pointerleave", onLeave);
+      sceneElement.addEventListener("click", onPick, true);
       choosePosters.current = items => {
         void records.setPosters(items, request.signal, () => {
           if (showing && !document.hidden) renderer.render(scene, camera);
@@ -711,9 +731,9 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
         window.removeEventListener("resize", onResize);
         choosePosters.current = updateInspection.current = null;
         cancelAnimationFrame(zoomFrame);
-        stage.removeEventListener("pointermove", onPoint);
-        stage.removeEventListener("pointerleave", onLeave);
-        stage.removeEventListener("click", onPick);
+        sceneElement.removeEventListener("pointermove", onPoint);
+        sceneElement.removeEventListener("pointerleave", onLeave);
+        sceneElement.removeEventListener("click", onPick, true);
         records.dispose();
         window.removeEventListener("scroll", onNativeScroll);
         document.removeEventListener("visibilitychange", onVisibilityChange);
