@@ -13,6 +13,7 @@ import { VisitClock } from "./visit-clock";
 import { createRecordWall } from "./tv-record-wall";
 
 import type { WallPoster, WallPosterCatalog } from "@/lib/wall-posters";
+import { PosterViewer } from "./poster-viewer";
 import { PosterWall, PosterInfo, useMusicPosters } from "./poster-wall";
 
 const motionQuery = "(prefers-reduced-motion: no-preference)";
@@ -53,6 +54,8 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   const [poweredOn, setPoweredOn] = useState(true);
   const [wallOpen, setWallOpen] = useState(false);
   const [posterId, setPosterId] = useState<string | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  const viewerOpener = useRef<HTMLButtonElement | null>(null);
   const music = useMusicPosters(enabled && inIntro && selected.id === "personal");
   const posters = selected.id === "personal" ? music.posters : wallPosters[selected.id];
   const poster = poweredOn ? posters.find(item => item.id === posterId) : undefined;
@@ -61,7 +64,20 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   const choosePosters = useRef<((items: readonly WallPoster[]) => void) | null>(null);
   const updateInspection = useRef<(() => void) | null>(null);
 
+  function openViewer(id: string, opener: HTMLButtonElement | null) {
+    viewerOpener.current = opener;
+    setViewerId(id);
+    setPosterId(null);
+  }
+
+  function closeViewer() {
+    setViewerId(null);
+    const opener = viewerOpener.current;
+    (opener?.isConnected ? opener : wallOpen ? wallClose.current : wallButton.current)?.focus({ preventScroll: true });
+  }
+
   function closeWall() {
+    setViewerId(null);
     setWallOpen(false);
     setPosterId(null);
     requestAnimationFrame(() => wallButton.current?.focus({ preventScroll: true }));
@@ -96,6 +112,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   });
   const restoreRoute = useEffectEvent(() => {
     const item = available.find(channel => channel.href === location.pathname);
+    setViewerId(null);
     setWallOpen(false);
     setPosterId(null);
     if (item) setTuned({ id: item.id });
@@ -104,6 +121,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
   function tune(direction: number) {
     if (!poweredOn || available.length < 2) return;
     setPosterId(null);
+    setViewerId(null);
     setWallOpen(false);
     setTuned(current => {
       const index = Math.max(0, available.findIndex(item => item.id === current.id));
@@ -463,24 +481,44 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
       }
       const canPick = () => showing && sceneElement.dataset.tuning === "true"
         && sceneElement.dataset.powered === "true" && sceneElement.dataset.wall !== "true";
+      let hoverPoint: { id: string; x: number; y: number } | null = null;
+      // The cabinet can grow over the pointer while a poster is being previewed.
+      // Keep the original target until the visitor actually moves away.
+      const heldPoster = (e: MouseEvent) => hoverPoint && sceneElement.dataset.inspect === "true"
+        && Math.hypot(e.clientX - hoverPoint.x, e.clientY - hoverPoint.y) <= 4 ? hoverPoint.id : null;
+      const clearHover = () => {
+        hoverPoint = null;
+        stage.style.cursor = "";
+        setPosterId(null);
+      };
       const onPoint = (e: PointerEvent) => {
         if (!canPick() || e.pointerType !== "mouse") return;
-        const { poster } = posterAt(e);
+        const target = e.target as Element;
+        if (target.closest(".crt-intro-stage, .crt-power") && heldPoster(e)) return;
+        const poster = stage.contains(target) ? posterAt(e).poster : null;
+        hoverPoint = poster ? { id: poster, x: e.clientX, y: e.clientY } : null;
         stage.style.cursor = poster ? "pointer" : "";
         setPosterId(poster);
       };
       const onLeave = (e: PointerEvent) => {
-        if (e.pointerType === "mouse") setPosterId(null);
+        if (e.pointerType === "mouse" && canPick()) clearHover();
       };
       const onPick = (e: MouseEvent) => {
-        if (!canPick()) return;
-        const hit = posterAt(e, true);
-        setPosterId(hit.poster);
-        if (!hit.poster && hit.wall) setWallOpen(true);
+        if (!canPick() || !e.detail) return;
+        const target = e.target as Element;
+        if (!target.closest(".crt-intro-stage, .crt-power")) return;
+        const held = heldPoster(e);
+        if (!held && !stage.contains(target)) return;
+        const hit = held ? { poster: held, wall: false } : posterAt(e, true);
+        clearHover();
+        if (hit.poster) {
+          e.stopPropagation();
+          openViewer(hit.poster, wallButton.current);
+        } else if (hit.wall) setWallOpen(true);
       };
-      stage.addEventListener("pointermove", onPoint);
-      stage.addEventListener("pointerleave", onLeave);
-      stage.addEventListener("click", onPick);
+      sceneElement.addEventListener("pointermove", onPoint);
+      sceneElement.addEventListener("pointerleave", onLeave);
+      sceneElement.addEventListener("click", onPick, true);
       choosePosters.current = items => {
         void records.setPosters(items, request.signal, () => {
           if (showing && !document.hidden) renderer.render(scene, camera);
@@ -589,7 +627,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
         if (active !== showing) {
           const wasShowing = showing;
           showing = active;
-          if (!active) { setWallOpen(false); setPosterId(null); }
+          if (!active) { setViewerId(null); setWallOpen(false); setPosterId(null); }
           returning = backingOut;
           page.classList.toggle("crt-page-preview", active);
           page.inert = active;
@@ -693,9 +731,9 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
         window.removeEventListener("resize", onResize);
         choosePosters.current = updateInspection.current = null;
         cancelAnimationFrame(zoomFrame);
-        stage.removeEventListener("pointermove", onPoint);
-        stage.removeEventListener("pointerleave", onLeave);
-        stage.removeEventListener("click", onPick);
+        sceneElement.removeEventListener("pointermove", onPoint);
+        sceneElement.removeEventListener("pointerleave", onLeave);
+        sceneElement.removeEventListener("click", onPick, true);
         records.dispose();
         window.removeEventListener("scroll", onNativeScroll);
         document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -765,6 +803,7 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
     if (inIntro) updateInspection.current?.();
   }, [inIntro, wallOpen, poster?.id]);
 
+  const viewerIndex = viewerId === null ? -1 : posters.findIndex(item => item.id === viewerId);
   if (!displayed || (pathname !== "/" && !direct)) return null;
   return <>
     <ChannelArrival />
@@ -805,9 +844,11 @@ export function CrtIntro({ panels, wallPosters }: { panels: Record<ChannelId, Re
           Skip to portfolio
         </a>
         <div className="crt-intro-scene" data-powered={poweredOn} data-wall={wallOpen} data-inspect={Boolean(poster)}>
+          {inIntro && viewerId !== null && posters.length > 0 && <PosterViewer channel={selected.name} posters={posters}
+            index={Math.max(0, viewerIndex)} onSelect={setViewerId} onClose={closeViewer} />}
           {wallOpen && <PosterWall channel={selected.name} posters={posters} selected={poster?.id ?? null}
             emptyMessage={selected.id === "personal" ? music.status === "loading" ? "Loading playlist…" : "No playlist artwork available." : "No published posters yet."}
-            closeRef={wallClose} onClose={closeWall} onPreview={setPosterId} />}
+            closeRef={wallClose} onClose={closeWall} onPreview={setPosterId} onOpen={openViewer} />}
           <div className="crt-picture">
             <div className="crt-intro-logo" ref={logoRef} aria-hidden="true">
               <div key={selected.id} hidden={Boolean(poster)} className="crt-channel-roll" data-direction={tuned.roll?.direction}
